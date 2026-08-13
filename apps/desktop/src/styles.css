@@ -91,6 +91,10 @@ button { cursor: pointer; }
 .status-dot--online { background: #7ee2ae; box-shadow: 0 0 0 3px rgba(126, 226, 174, 0.1), 0 0 12px rgba(126, 226, 174, 0.35); }
 .status-dot--checking { background: #d7b574; }
 .status-dot--offline { background: #c87979; }
+.status-dot--starting { background: #d7b574; box-shadow: 0 0 0 3px rgba(215, 181, 116, 0.1); }
+.status-dot--running { background: #7ee2ae; box-shadow: 0 0 0 3px rgba(126, 226, 174, 0.1), 0 0 12px rgba(126, 226, 174, 0.35); }
+.status-dot--stopping { background: #c5a46c; box-shadow: 0 0 0 3px rgba(197, 164, 108, 0.1); }
+.status-dot--error { background: #c87979; box-shadow: 0 0 0 3px rgba(200, 121, 121, 0.1); }
 
 .content-panel { width: min(1180px, 100%); margin: 0 auto; padding: 42px 52px 28px; }
 .topbar { justify-content: space-between; margin-bottom: 34px; }
@@ -251,6 +255,11 @@ h3 { margin-top: 7px; color: #dfe8e2; font-size: 16px; }
 .project-row__topline { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .project-row h4, .service-row h4 { margin: 0; color: #dce8df; font-size: 13px; font-weight: 600; }
 .registered-badge { color: #80b594; font-family: "Cascadia Code", Consolas, monospace; font-size: 8px; letter-spacing: 0.05em; text-transform: uppercase; }
+.runtime-badge { font-family: "Cascadia Code", Consolas, monospace; font-size: 8px; letter-spacing: 0.04em; text-transform: uppercase; }
+.runtime-badge--stopped { color: #718078; }
+.runtime-badge--starting, .runtime-badge--stopping { color: #d7b574; }
+.runtime-badge--running { color: #83d7a8; }
+.runtime-badge--error { color: #d18484; }
 .project-row__path { overflow: hidden; margin: 8px 0 0; color: #6c7b73; font-family: "Cascadia Code", Consolas, monospace; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .project-row__meta { display: flex; gap: 12px; margin-top: 11px; color: #72847a; font-size: 10px; }
 .project-row__meta span + span::before { margin-right: 12px; color: #41544a; content: "/"; }
@@ -259,6 +268,7 @@ h3 { margin-top: 7px; color: #dfe8e2; font-size: 16px; }
 .detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding-bottom: 25px; border-bottom: 1px solid #1d2826; }
 .detail-heading h2, .modal-heading h2 { margin-top: 8px; color: #eef5ef; font-size: 27px; line-height: 1.1; }
 .detail-path { display: block; max-width: 420px; overflow: hidden; margin-top: 10px; color: #70847a; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.detail-status { display: flex; align-items: center; gap: 7px; margin-top: 13px; color: #8e9e94; font-size: 10px; }
 .detail-actions { display: flex; gap: 7px; }
 .detail-actions .ghost-button { min-height: 32px; padding: 0 12px; }
 .detail-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; padding: 25px 0 15px; }
@@ -266,12 +276,17 @@ h3 { margin-top: 7px; color: #dfe8e2; font-size: 16px; }
 .text-button { padding: 3px 0; color: #8bcaa4; background: transparent; }
 .text-button:hover { color: #b9efd0; }
 .service-list { display: grid; gap: 7px; }
-.service-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; align-items: center; gap: 15px; min-height: 74px; padding: 13px 14px; border: 1px solid #27342f; border-radius: 7px; background: #11191a; }
+.service-row { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto auto; align-items: center; gap: 15px; min-height: 74px; padding: 13px 14px; border: 1px solid #27342f; border-radius: 7px; background: #11191a; }
 .service-row__status { display: flex; align-items: center; gap: 7px; color: #8d9c94; font-size: 10px; }
 .service-row__status .status-dot { width: 6px; height: 6px; background: #687672; box-shadow: none; }
 .service-row__main { min-width: 0; }
 .service-row__main code { display: block; overflow: hidden; margin-top: 7px; color: #a8c2b0; font-family: "Cascadia Code", Consolas, monospace; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .service-cwd { display: inline-block; margin-top: 6px; color: #607269; font-family: "Cascadia Code", Consolas, monospace; font-size: 9px; }
+.service-error { display: block; overflow: hidden; margin-top: 6px; color: #d18484; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.service-row__actions { display: flex; gap: 5px; }
+.service-action { min-height: 25px; padding: 0 7px; border: 1px solid #2c4036; border-radius: 4px; color: #89c5a2; background: #16211d; font-family: "Cascadia Code", Consolas, monospace; font-size: 9px; }
+.service-action:hover:not(:disabled) { border-color: #629276; color: #c4eed3; background: #1b3025; }
+.service-action:disabled { cursor: default; color: #4d5d54; border-color: #24302b; background: #111719; }
 .service-port { color: #8bd4a8; font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; }
 .service-empty { display: grid; justify-items: start; gap: 15px; padding: 28px 18px; border: 1px dashed #2a3b34; border-radius: 7px; color: #718078; font-size: 11px; }
 .service-empty p { margin: 0; }

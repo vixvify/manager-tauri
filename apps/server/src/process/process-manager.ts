@@ -122,7 +122,7 @@ export class ProcessManager {
     this.setState(projectId, managed.state);
 
     await this.terminateProcessTree(managed.child);
-    await this.waitForExit(managed.child);
+    await this.waitForProcessToStop(key);
     return this.getServiceState(projectId, serviceId);
   }
 
@@ -244,18 +244,20 @@ export class ProcessManager {
     });
   }
 
-  private async waitForExit(child: ChildProcess) {
-    if (child.exitCode !== null || child.signalCode !== null) {
-      return;
+  private async waitForProcessToStop(key: string) {
+    const deadline = Date.now() + 2000;
+
+    while (this.managedProcesses.has(key) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25));
     }
 
-    await new Promise<void>((resolve) => {
-      const timeout = setTimeout(resolve, 2000);
-      child.once("close", () => {
-        clearTimeout(timeout);
-        resolve();
-      });
-    });
+    const managed = this.managedProcesses.get(key);
+    if (managed) {
+      managed.state.status = "stopped";
+      managed.state.pid = undefined;
+      this.managedProcesses.delete(key);
+      this.setState(managed.projectId, managed.state);
+    }
   }
 
   private key(projectId: string, serviceId: string) {

@@ -339,7 +339,9 @@ export function App() {
                   >
                     <div className="project-row__topline">
                       <h4>{project.name}</h4>
-                      <span className="registered-badge">Registered</span>
+                      <span className={`runtime-badge runtime-badge--${runtime.find((state) => state.projectId === project.id)?.status ?? "stopped"}`}>
+                        {statusLabel(runtime.find((state) => state.projectId === project.id)?.status ?? "stopped")}
+                      </span>
                     </div>
                     <p className="project-row__path" title={project.path}>{project.path}</p>
                     <div className="project-row__meta">
@@ -360,8 +362,25 @@ export function App() {
                     <p className="eyebrow">Project detail</p>
                     <h2>{selectedProject.name}</h2>
                     <code className="detail-path" title={selectedProject.path}>{selectedProject.path}</code>
+                    <div className="detail-status"><StatusDot state={selectedRuntime?.status ?? "stopped"} /><span>{statusLabel(selectedRuntime?.status ?? "stopped")}</span></div>
                   </div>
                   <div className="detail-actions">
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      disabled={selectedProject.services.length === 0 || processAction !== null || selectedRuntime?.status === "running" || selectedRuntime?.status === "starting"}
+                      onClick={() => void runProjectAction(selectedProject.id, "start")}
+                    >
+                      Start all
+                    </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      disabled={processAction !== null || (!selectedRuntime?.services || !Object.values(selectedRuntime.services).some((service) => service.status !== "stopped"))}
+                      onClick={() => void runProjectAction(selectedProject.id, "stop")}
+                    >
+                      Stop all
+                    </button>
                     <button className="ghost-button" type="button" onClick={() => openEditModal(selectedProject)}>Edit</button>
                     <button className="danger-button" type="button" disabled={deletingProjectId === selectedProject.id} onClick={() => void removeProject(selectedProject)}>
                       {deletingProjectId === selectedProject.id ? "Removing..." : "Remove"}
@@ -384,17 +403,30 @@ export function App() {
                   </div>
                 ) : (
                   <div className="service-list">
-                    {selectedProject.services.map((service) => (
-                      <article className="service-row" key={service.id}>
-                        <div className="service-row__status"><StatusDot state="offline" /><span>Stopped</span></div>
-                        <div className="service-row__main">
-                          <h4>{service.name}</h4>
-                          <code>{service.command}</code>
-                          {service.cwd && <span className="service-cwd">cwd {service.cwd}</span>}
-                        </div>
-                        {service.port && <span className="service-port">:{service.port}</span>}
-                      </article>
-                    ))}
+                    {selectedProject.services.map((service) => {
+                      const serviceRuntime = getServiceRuntime(service.id);
+                      const actionKey = `${selectedProject.id}:${service.id}`;
+                      const isBusy = processAction === actionKey || serviceRuntime.status === "starting" || serviceRuntime.status === "stopping";
+                      const canStop = serviceRuntime.status === "running" || serviceRuntime.status === "starting" || serviceRuntime.status === "error";
+
+                      return (
+                        <article className="service-row" key={service.id}>
+                          <div className="service-row__status"><StatusDot state={serviceRuntime.status} /><span>{statusLabel(serviceRuntime.status)}</span></div>
+                          <div className="service-row__main">
+                            <h4>{service.name}</h4>
+                            <code>{service.command}</code>
+                            {service.cwd && <span className="service-cwd">cwd {service.cwd}</span>}
+                            {serviceRuntime.error && <span className="service-error">{serviceRuntime.error}</span>}
+                          </div>
+                          <div className="service-row__actions">
+                            <button className="service-action" type="button" disabled={isBusy || canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "start")}>Start</button>
+                            <button className="service-action" type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "stop")}>Stop</button>
+                            <button className="service-action" type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "restart")}>Restart</button>
+                          </div>
+                          {service.port && <span className="service-port">:{service.port}</span>}
+                        </article>
+                      );
+                    })}
                   </div>
                 )}
 

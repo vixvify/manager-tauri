@@ -67,6 +67,8 @@ export function createApp(projectService = new ProjectService(), processManager 
 
   app.delete("/api/projects/:projectId", async (request, response) => {
     try {
+      await projectService.get(request.params.projectId);
+      await processManager.stopAll(request.params.projectId);
       await projectService.remove(request.params.projectId);
       response.status(204).send();
     } catch (error) {

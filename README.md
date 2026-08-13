@@ -16,6 +16,8 @@ Phase 2 adds project registration and local persistence. Projects are stored in 
 
 The desktop UI supports adding and editing project paths and service definitions. In the Tauri window, `Browse` opens the native folder picker; when running the Vite page directly, the path can be entered manually.
 
+Phase 3 adds backend-owned process controls: start, stop, restart, start all, stop all, runtime status polling, Windows process-tree cleanup, and shutdown cleanup. Removing a project also stops its managed services first.
+
 ## Development
 
 ```text
