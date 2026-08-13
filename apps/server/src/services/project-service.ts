@@ -28,8 +28,12 @@ function normalizeOptionalString(value: string | undefined) {
 }
 
 function normalizeService(input: ServiceInput, existingId?: string): Service {
-  const name = input.name.trim();
-  const command = input.command.trim();
+  if (!input || typeof input !== "object") {
+    throw new ProjectValidationError("Every service must be an object.");
+  }
+
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  const command = typeof input.command === "string" ? input.command.trim() : "";
 
   if (!name) {
     throw new ProjectValidationError("Every service needs a name.");
@@ -53,8 +57,12 @@ function normalizeService(input: ServiceInput, existingId?: string): Service {
 }
 
 function normalizeProject(input: ProjectInput, existing?: Project): Project {
-  const name = input.name.trim();
-  const projectPath = input.path.trim();
+  if (!input || typeof input !== "object") {
+    throw new ProjectValidationError("Project data must be an object.");
+  }
+
+  const name = typeof input.name === "string" ? input.name.trim() : "";
+  const projectPath = typeof input.path === "string" ? input.path.trim() : "";
 
   if (!name) {
     throw new ProjectValidationError("A project needs a name.");
@@ -62,6 +70,10 @@ function normalizeProject(input: ProjectInput, existing?: Project): Project {
 
   if (!projectPath) {
     throw new ProjectValidationError("A project needs a local path.");
+  }
+
+  if (input.services !== undefined && !Array.isArray(input.services)) {
+    throw new ProjectValidationError("Project services must be an array.");
   }
 
   const incomingServices = input.services ?? [];
