@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { HealthResponse, Project, ProjectInput, Service } from "@devdeck/shared";
+import type { HealthResponse, Project, ProjectInput, ProjectRuntimeState, Service, ServiceRuntimeState, ServiceStatus } from "@devdeck/shared";
 
 const serverUrl = import.meta.env.VITE_SERVER_URL ?? "http://127.0.0.1:4317";
 
 type ConnectionState = "checking" | "online" | "offline";
 type ModalMode = "create" | "edit" | null;
 type ProjectForm = Omit<ProjectInput, "services"> & { services: Service[] };
+type ProcessAction = "start" | "stop" | "restart";
 
 function createId() {
   return typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -50,14 +51,19 @@ async function apiRequest<T>(path: string, init?: RequestInit) {
   return body as T;
 }
 
-function StatusDot({ state }: { state: ConnectionState }) {
+function StatusDot({ state }: { state: ConnectionState | ServiceStatus }) {
   return <span className={`status-dot status-dot--${state}`} aria-hidden="true" />;
+}
+
+function statusLabel(status: ServiceStatus) {
+  return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
 export function App() {
   const [connectionState, setConnectionState] = useState<ConnectionState>("checking");
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [runtime, setRuntime] = useState<ProjectRuntimeState[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isProjectsLoading, setIsProjectsLoading] = useState(true);
   const [projectsError, setProjectsError] = useState<string | null>(null);
@@ -66,8 +72,10 @@ export function App() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [processAction, setProcessAction] = useState<string | null>(null);
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
+  const selectedRuntime = runtime.find((state) => state.projectId === selectedProjectId);
 
   const checkConnection = useCallback(async () => {
     setConnectionState("checking");
@@ -99,13 +107,25 @@ export function App() {
     }
   }, []);
 
+  const loadRuntime = useCallback(async () => {
+    try {
+      setRuntime(await apiRequest<ProjectRuntimeState[]>("/api/runtime"));
+    } catch {
+      // The connection indicator and project load surface the backend error.
+    }
+  }, []);
+
   useEffect(() => {
     void checkConnection();
     void loadProjects();
-    const interval = window.setInterval(() => void checkConnection(), 5000);
+    void loadRuntime();
+    const interval = window.setInterval(() => {
+      void checkConnection();
+      void loadRuntime();
+    }, 2000);
 
     return () => window.clearInterval(interval);
-  }, [checkConnection, loadProjects]);
+  }, [checkConnection, loadProjects, loadRuntime]);
 
   function openCreateModal() {
     setForm(createEmptyForm());
@@ -205,6 +225,39 @@ export function App() {
       setProjectsError(error instanceof Error ? error.message : "Unable to remove project.");
     } finally {
       setDeletingProjectId(null);
+    }
+  }
+
+  function getServiceRuntime(serviceId: string): ServiceRuntimeState {
+    return selectedRuntime?.services[serviceId] ?? { serviceId, status: "stopped" };
+  }
+
+  async function runServiceAction(projectId: string, serviceId: string, action: ProcessAction) {
+    const actionKey = `${projectId}:${serviceId}`;
+    setProcessAction(actionKey);
+
+    try {
+      await apiRequest<ServiceRuntimeState>(`/api/projects/${projectId}/services/${serviceId}/${action}`, { method: "POST" });
+      await loadRuntime();
+    } catch (error) {
+      setProjectsError(error instanceof Error ? error.message : `Unable to ${action} service.`);
+      await loadRuntime();
+    } finally {
+      setProcessAction(null);
+    }
+  }
+
+  async function runProjectAction(projectId: string, action: "start" | "stop") {
+    setProcessAction(`${projectId}:all`);
+
+    try {
+      await apiRequest<ProjectRuntimeState>(`/api/projects/${projectId}/${action}`, { method: "POST" });
+      await loadRuntime();
+    } catch (error) {
+      setProjectsError(error instanceof Error ? error.message : `Unable to ${action} project.`);
+      await loadRuntime();
+    } finally {
+      setProcessAction(null);
     }
   }
 

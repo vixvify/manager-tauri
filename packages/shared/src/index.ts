@@ -29,6 +29,19 @@ export interface ProjectInput {
 
 export type ServiceStatus = "stopped" | "starting" | "running" | "stopping" | "error";
 
+export interface ServiceRuntimeState {
+  serviceId: string;
+  status: ServiceStatus;
+  pid?: number;
+  error?: string;
+}
+
+export interface ProjectRuntimeState {
+  projectId: string;
+  status: ServiceStatus;
+  services: Record<string, ServiceRuntimeState>;
+}
+
 export interface HealthResponse {
   status: "ok";
   service: "devdeck-server";

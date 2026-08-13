@@ -1,8 +1,9 @@
 import express from "express";
 import type { HealthResponse, ProjectInput } from "@devdeck/shared";
+import { ProcessManager, ProcessOperationError, ServiceNotFoundError } from "./process/process-manager.js";
 import { ProjectNotFoundError, ProjectService, ProjectValidationError } from "./services/project-service.js";
 
-export function createApp(projectService = new ProjectService()) {
+export function createApp(projectService = new ProjectService(), processManager = new ProcessManager(projectService)) {
   const app = express();
 
   app.use((request, response, next) => {
@@ -73,6 +74,64 @@ export function createApp(projectService = new ProjectService()) {
     }
   });
 
+  app.get("/api/runtime", async (_request, response) => {
+    try {
+      response.json(await processManager.getAllStates());
+    } catch (error) {
+      sendProjectError(error, response);
+    }
+  });
+
+  app.get("/api/projects/:projectId/runtime", async (request, response) => {
+    try {
+      response.json(await processManager.getProjectState(request.params.projectId));
+    } catch (error) {
+      sendProjectError(error, response);
+    }
+  });
+
+  app.post("/api/projects/:projectId/start", async (request, response) => {
+    try {
+      await processManager.startAll(request.params.projectId);
+      response.json(await processManager.getProjectState(request.params.projectId));
+    } catch (error) {
+      sendProjectError(error, response);
+    }
+  });
+
+  app.post("/api/projects/:projectId/stop", async (request, response) => {
+    try {
+      await processManager.stopAll(request.params.projectId);
+      response.json(await processManager.getProjectState(request.params.projectId));
+    } catch (error) {
+      sendProjectError(error, response);
+    }
+  });
+
+  app.post("/api/projects/:projectId/services/:serviceId/start", async (request, response) => {
+    try {
+      response.json(await processManager.start(request.params.projectId, request.params.serviceId));
+    } catch (error) {
+      sendProjectError(error, response);
+    }
+  });
+
+  app.post("/api/projects/:projectId/services/:serviceId/stop", async (request, response) => {
+    try {
+      response.json(await processManager.stop(request.params.projectId, request.params.serviceId));
+    } catch (error) {
+      sendProjectError(error, response);
+    }
+  });
+
+  app.post("/api/projects/:projectId/services/:serviceId/restart", async (request, response) => {
+    try {
+      response.json(await processManager.restart(request.params.projectId, request.params.serviceId));
+    } catch (error) {
+      sendProjectError(error, response);
+    }
+  });
+
   return app;
 }
 
@@ -84,6 +143,16 @@ function sendProjectError(error: unknown, response: express.Response) {
 
   if (error instanceof ProjectValidationError) {
     response.status(400).json({ error: error.message });
+    return;
+  }
+
+  if (error instanceof ServiceNotFoundError) {
+    response.status(404).json({ error: error.message });
+    return;
+  }
+
+  if (error instanceof ProcessOperationError) {
+    response.status(409).json({ error: error.message });
     return;
   }
 
