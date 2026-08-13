@@ -1,6 +1,7 @@
 use crate::error::{AppError, AppResult};
 use crate::models::{Project, ProjectInput, ProjectReorderInput, Service, ServiceInput};
 use crate::state::AppState;
+use std::path::Path;
 use uuid::Uuid;
 
 pub fn get_projects(state: &AppState) -> AppResult<Vec<Project>> {
@@ -122,6 +123,11 @@ fn normalize_project(input: ProjectInput, existing: Option<&Project>) -> AppResu
             "A project path is required.".into(),
         ));
     }
+    if !Path::new(&path).is_dir() {
+        return Err(AppError::InvalidProjectPath(format!(
+            "Project directory does not exist: {path}"
+        )));
+    }
 
     let existing_services = existing.map(|project| &project.services);
     let services = input
@@ -163,4 +169,75 @@ fn normalize_service(input: ServiceInput, existing: Option<&Vec<Service>>) -> Ap
             .and_then(|value| (!value.trim().is_empty()).then(|| value.trim().to_string())),
         port: input.port,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::AppState;
+    use std::fs;
+
+    #[test]
+    fn project_crud_and_order_are_persisted() {
+        let test_dir = std::env::temp_dir().join(format!("devdeck-test-{}", Uuid::new_v4()));
+        fs::create_dir_all(&test_dir).expect("create test directory");
+        let state = AppState::load(test_dir.join("projects.json")).expect("load state");
+
+        let first = add_project(
+            &state,
+            ProjectInput {
+                name: "First".into(),
+                path: test_dir.to_string_lossy().into_owned(),
+                services: None,
+            },
+        )
+        .expect("add first project");
+        let second = add_project(
+            &state,
+            ProjectInput {
+                name: "Second".into(),
+                path: test_dir.to_string_lossy().into_owned(),
+                services: None,
+            },
+        )
+        .expect("add second project");
+
+        let reordered = reorder_projects(
+            &state,
+            ProjectReorderInput {
+                project_ids: vec![second.id.clone(), first.id.clone()],
+            },
+        )
+        .expect("reorder projects");
+        assert_eq!(reordered[0].id, second.id);
+
+        let loaded = AppState::load(test_dir.join("projects.json")).expect("reload state");
+        assert_eq!(
+            get_projects(&loaded).expect("read projects")[0].id,
+            second.id
+        );
+
+        remove_project(&loaded, &first.id).expect("remove first project");
+        remove_project(&loaded, &second.id).expect("remove second project");
+        fs::remove_dir_all(test_dir).expect("remove test directory");
+    }
+
+    #[test]
+    fn rejects_missing_project_directory() {
+        let state_file = std::env::temp_dir().join(format!("devdeck-test-{}.json", Uuid::new_v4()));
+        let state = AppState::load(state_file.clone()).expect("load state");
+        let result = add_project(
+            &state,
+            ProjectInput {
+                name: "Missing".into(),
+                path: state_file
+                    .with_extension("missing")
+                    .to_string_lossy()
+                    .into_owned(),
+                services: None,
+            },
+        );
+        assert!(matches!(result, Err(AppError::InvalidProjectPath(_))));
+        let _ = fs::remove_file(state_file);
+    }
 }

@@ -28,3 +28,16 @@ pub fn wait_for_listening(port: u16, attempts: usize) -> AppResult<bool> {
     }
     Ok(false)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::TcpListener;
+
+    #[test]
+    fn detects_a_bound_port() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind test port");
+        let port = listener.local_addr().expect("read test port").port();
+        assert!(is_listening(port).expect("check test port"));
+    }
+}

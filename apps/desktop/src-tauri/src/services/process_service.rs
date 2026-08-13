@@ -26,9 +26,7 @@ pub fn get_project_runtime(state: &AppState, project_id: &str) -> AppResult<Proj
     let mut services = std::collections::HashMap::new();
     for service in &project.services {
         let mut runtime = get_service_runtime(state, project_id, service);
-        if matches!(runtime.status, ServiceStatus::Stopped)
-            && docker_service::is_detached_compose(&service.command)
-        {
+        if docker_service::is_detached_compose(&service.command) {
             if let Ok(cwd) = resolve_working_directory(&project.path, service.cwd.as_deref()) {
                 match docker_service::is_running(&service.command, &cwd) {
                     Ok(true) => {
@@ -36,7 +34,11 @@ pub fn get_project_runtime(state: &AppState, project_id: &str) -> AppResult<Proj
                             runtime_state(service, ServiceStatus::Running, RuntimeMode::Docker);
                         runtime.port_status = port_status(service.port)?;
                     }
-                    Ok(false) => {}
+                    Ok(false) => {
+                        runtime =
+                            runtime_state(service, ServiceStatus::Stopped, RuntimeMode::Docker);
+                        runtime.port_status = service.port.map(|_| PortStatus::Available);
+                    }
                     Err(error) => {
                         runtime = runtime_state(service, ServiceStatus::Error, RuntimeMode::Docker);
                         runtime.error = Some(error.to_string());
@@ -44,12 +46,10 @@ pub fn get_project_runtime(state: &AppState, project_id: &str) -> AppResult<Proj
                 }
             }
         }
-        if !matches!(runtime.status, ServiceStatus::Stopped) {
-            if let Ok(mut guard) = state.inner.lock() {
-                guard
-                    .runtime
-                    .insert(key(project_id, &service.id), runtime.clone());
-            }
+        if let Ok(mut guard) = state.inner.lock() {
+            guard
+                .runtime
+                .insert(key(project_id, &service.id), runtime.clone());
         }
         services.insert(service.id.clone(), runtime);
     }
@@ -193,7 +193,13 @@ pub fn start_service(
     }
 
     if let Some(port) = service.port {
-        port_service::ensure_available(port)?;
+        if let Err(error) = port_service::ensure_available(port) {
+            let mut failed = runtime_state(&service, ServiceStatus::Error, RuntimeMode::Process);
+            failed.port_status = Some(PortStatus::Occupied);
+            failed.error = Some(error.to_string());
+            set_runtime_state(app, state, project_id, failed);
+            return Err(error);
+        }
     }
 
     if is_docker {
@@ -234,7 +240,15 @@ pub fn start_service(
         return Ok(running);
     }
 
-    let mut child = spawn_process(&service.command, &cwd)?;
+    let mut child = match spawn_process(&service.command, &cwd) {
+        Ok(child) => child,
+        Err(error) => {
+            let mut failed = runtime_state(&service, ServiceStatus::Error, RuntimeMode::Process);
+            failed.error = Some(error.to_string());
+            set_runtime_state(app, state, project_id, failed);
+            return Err(error);
+        }
+    };
     let pid = child.id();
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
@@ -325,7 +339,7 @@ pub fn stop_service(
         .get(&service_key)
         .map(|process| (process.pid, process.child.clone()));
 
-    if let Some((pid, _child)) = managed {
+    if let Some((pid, child)) = managed {
         if matches!(current.status, ServiceStatus::Stopping) {
             return Ok(current);
         }
@@ -333,9 +347,12 @@ pub fn stop_service(
         stopping.status = ServiceStatus::Stopping;
         stopping.error = None;
         set_runtime_state(app, state, project_id, stopping);
-        terminate_process(pid)?;
+        terminate_process(pid, &child)?;
         wait_until_stopped(state, &service_key);
-        return Ok(get_service_runtime(state, project_id, &service));
+        let mut stopped = runtime_state(&service, ServiceStatus::Stopped, RuntimeMode::Process);
+        stopped.port_status = service.port.map(|_| PortStatus::Available);
+        set_runtime_state(app, state, project_id, stopped.clone());
+        return Ok(stopped);
     }
 
     if matches!(current.mode, Some(RuntimeMode::Docker))
@@ -539,10 +556,17 @@ fn spawn_process_monitor(
     let project_for_monitor = project_id.clone();
     let service_for_monitor = service.clone();
     thread::spawn(move || {
-        let result = child
-            .lock()
-            .ok()
-            .and_then(|mut process| process.wait().ok());
+        let result = loop {
+            let process_state = child
+                .lock()
+                .ok()
+                .and_then(|mut process| process.try_wait().ok());
+            match process_state {
+                Some(Some(status)) => break Some(status),
+                Some(None) => thread::sleep(Duration::from_millis(50)),
+                None => break None,
+            }
+        };
         let service_key = key(&project_for_monitor, &service_for_monitor.id);
         let was_stopping = state_for_monitor
             .inner
@@ -632,18 +656,17 @@ fn wait_until_stopped(state: &AppState, service_key: &str) {
     }
 }
 
-fn terminate_process(pid: u32) -> AppResult<()> {
+fn terminate_process(pid: u32, child: &Arc<Mutex<Child>>) -> AppResult<()> {
     if cfg!(windows) {
-        let output = Command::new("taskkill.exe")
+        let mut taskkill = Command::new("taskkill.exe");
+        configure_hidden(&mut taskkill);
+        let output = taskkill
             .args(["/PID", &pid.to_string(), "/T", "/F"])
             .output()?;
         if output.status.success() {
             Ok(())
         } else {
-            Err(AppError::CommandFailed {
-                command: format!("taskkill /PID {pid} /T /F"),
-                message: String::from_utf8_lossy(&output.stderr).trim().into(),
-            })
+            kill_child_fallback(child, format!("taskkill /PID {pid} /T /F"))
         }
     } else {
         let status = Command::new("kill")
@@ -652,11 +675,33 @@ fn terminate_process(pid: u32) -> AppResult<()> {
         if status.success() {
             Ok(())
         } else {
-            Err(AppError::CommandFailed {
-                command: format!("kill -TERM {pid}"),
-                message: "Unable to terminate process.".into(),
-            })
+            kill_child_fallback(child, format!("kill -TERM {pid}"))
         }
+    }
+}
+
+fn kill_child_fallback(child: &Arc<Mutex<Child>>, command: String) -> AppResult<()> {
+    let mut process = child
+        .lock()
+        .map_err(|_| AppError::Storage("Process lock poisoned.".into()))?;
+    match process.try_wait() {
+        Ok(Some(_)) => Ok(()),
+        Ok(None) => process.kill().map_err(|error| AppError::CommandFailed {
+            command,
+            message: error.to_string(),
+        }),
+        Err(error) => Err(AppError::CommandFailed {
+            command,
+            message: error.to_string(),
+        }),
+    }
+}
+
+fn configure_hidden(command: &mut Command) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000);
     }
 }
 
@@ -755,4 +800,53 @@ fn windows_program(program: &str) -> String {
 
 fn chrono_like_timestamp() -> String {
     chrono::Utc::now().to_rfc3339()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tokenizes_quoted_arguments() {
+        let tokens = tokenize_command(r#"npm run "dev:local" -- --host "127.0.0.1""#)
+            .expect("tokenize command");
+        assert_eq!(
+            tokens,
+            ["npm", "run", "dev:local", "--", "--host", "127.0.0.1"]
+        );
+    }
+
+    #[test]
+    fn terminate_process_stops_the_managed_child() {
+        let mut process = if cfg!(windows) {
+            let mut command = Command::new("cmd.exe");
+            command.args(["/C", "ping 127.0.0.1 -n 30 >NUL"]);
+            command
+        } else {
+            let mut command = Command::new("sh");
+            command.args(["-c", "sleep 30"]);
+            command
+        };
+        process
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let child = Arc::new(Mutex::new(process.spawn().expect("spawn test process")));
+        let pid = child.lock().expect("lock test child").id();
+
+        terminate_process(pid, &child).expect("terminate test process");
+        for _ in 0..40 {
+            if child
+                .lock()
+                .expect("lock test child")
+                .try_wait()
+                .expect("poll test child")
+                .is_some()
+            {
+                return;
+            }
+            thread::sleep(Duration::from_millis(25));
+        }
+        panic!("test process did not stop");
+    }
 }

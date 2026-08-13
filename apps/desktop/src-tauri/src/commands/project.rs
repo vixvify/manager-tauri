@@ -23,8 +23,13 @@ pub fn add_project(input: ProjectInput, state: State<'_, AppState>) -> AppResult
 pub fn update_project(
     project_id: String,
     input: ProjectInput,
+    app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<Project> {
+    let existing = project_service::get_project(&state, &project_id)?;
+    if project_configuration_changed(&existing, &input) {
+        process_service::stop_project(&app, &state, &project_id)?;
+    }
     project_service::update_project(&state, &project_id, input)
 }
 
@@ -44,4 +49,28 @@ pub fn reorder_projects(
     state: State<'_, AppState>,
 ) -> AppResult<Vec<Project>> {
     project_service::reorder_projects(&state, input)
+}
+
+fn project_configuration_changed(project: &Project, input: &ProjectInput) -> bool {
+    if project.path != input.path.trim() {
+        return true;
+    }
+
+    let services = input.services.as_deref().unwrap_or_default();
+    project.services.len() != services.len()
+        || project
+            .services
+            .iter()
+            .zip(services.iter())
+            .any(|(current, next)| {
+                next.id.as_deref() != Some(current.id.as_str())
+                    || current.command != next.command.trim()
+                    || current.cwd.as_deref()
+                        != next
+                            .cwd
+                            .as_deref()
+                            .map(str::trim)
+                            .filter(|value| !value.is_empty())
+                    || current.port != next.port
+            })
 }
