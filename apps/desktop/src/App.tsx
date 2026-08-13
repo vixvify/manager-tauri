@@ -28,8 +28,42 @@ function createFormFromProject(project: Project): ProjectForm {
   };
 }
 
+const statusDotClasses: Record<ConnectionState | ServiceStatus, string> = {
+  online: "bg-[#7ee2ae] shadow-[0_0_0_3px_rgba(126,226,174,0.1),0_0_12px_rgba(126,226,174,0.35)]",
+  running: "bg-[#7ee2ae] shadow-[0_0_0_3px_rgba(126,226,174,0.1),0_0_12px_rgba(126,226,174,0.35)]",
+  checking: "bg-[#d7b574]",
+  starting: "bg-[#d7b574] shadow-[0_0_0_3px_rgba(215,181,116,0.1)]",
+  offline: "bg-[#c87979]",
+  error: "bg-[#c87979] shadow-[0_0_0_3px_rgba(200,121,121,0.1)]",
+  stopping: "bg-[#c5a46c] shadow-[0_0_0_3px_rgba(197,164,108,0.1)]",
+  stopped: "bg-[#687672]"
+};
+
+const runtimeBadgeClasses: Record<ServiceStatus, string> = {
+  stopped: "text-[#718078]",
+  starting: "text-[#d7b574]",
+  running: "text-[#83d7a8]",
+  stopping: "text-[#d7b574]",
+  error: "text-[#d18484]"
+};
+
+const portClasses: Record<NonNullable<ServiceRuntimeState["portStatus"]>, string> = {
+  unknown: "text-[#8bd4a8]",
+  checking: "text-[#8bd4a8]",
+  listening: "text-[#8bd4a8]",
+  available: "text-[#d1a36f]",
+  occupied: "text-[#d18484]"
+};
+
+const primaryButtonClass = "inline-flex min-h-[35px] items-center justify-center gap-2 rounded-md bg-[#8de1b8] px-[14px] text-[11px] font-semibold text-[#0c1611] shadow-[0_0_18px_rgba(141,225,184,0.08)] transition hover:bg-[#b0f0cd] disabled:cursor-wait disabled:opacity-55";
+const secondaryButtonClass = "inline-flex min-h-[35px] items-center justify-center gap-2 rounded-md border border-[#365544] bg-[#17241f] px-[14px] text-[11px] font-semibold text-[#c9e3d1] transition hover:border-[#639176] hover:bg-[#1c3027] disabled:cursor-wait disabled:opacity-55";
+const ghostButtonClass = "inline-flex min-h-[35px] items-center justify-center gap-2 rounded-md border border-[#2b3733] bg-[#111619] px-3 text-[11px] text-[#a1aea8] transition hover:border-[#527664] hover:bg-[#16221d] hover:text-[#dcebe2] disabled:cursor-wait disabled:opacity-55";
+const dangerButtonClass = "inline-flex min-h-[35px] items-center justify-center gap-2 rounded-md border border-[#4b3032] bg-[#211719] px-[14px] text-[11px] font-semibold text-[#d89595] transition hover:border-[#75474a] hover:bg-[#2b1b1e] hover:text-[#f0b0b0] disabled:cursor-wait disabled:opacity-55";
+const textButtonClass = "border-0 bg-transparent px-0 py-[3px] text-[11px] text-[#8bcaa4] transition hover:text-[#b9efd0]";
+const eyebrowClass = "font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#687672]";
+
 function StatusDot({ state }: { state: ConnectionState | ServiceStatus }) {
-  return <span className={`status-dot status-dot--${state}`} aria-hidden="true" />;
+  return <span className={`inline-block h-[7px] w-[7px] shrink-0 rounded-full ${statusDotClasses[state]}`} aria-hidden="true" />;
 }
 
 function statusLabel(status: ServiceStatus) {
@@ -334,69 +368,69 @@ export function App() {
   }[connectionState];
 
   return (
-    <main className="app-shell">
-      <aside className="sidebar">
-        <div className="brand-lockup">
-          <div className="brand-mark" aria-hidden="true"><span /><span /><span /></div>
+    <main className="grid min-h-screen grid-cols-[248px_minmax(0,1fr)] bg-[radial-gradient(circle_at_75%_-20%,rgba(55,78,71,0.18),transparent_38%),#0b0d10]">
+      <aside className="flex flex-col border-r border-[#1b2223] bg-[rgba(12,15,17,0.88)] px-[18px] pb-6 pt-7">
+        <div className="flex items-center gap-3 px-2 pb-8 pt-1">
+          <div className="grid h-[30px] w-[30px] grid-cols-3 items-end gap-[3px] rounded-lg border border-[#34483f] bg-[#17241f] p-1.5" aria-hidden="true"><span className="block h-[9px] rounded-[2px_2px_1px_1px] bg-[#8de1b8] opacity-55" /><span className="block h-[14px] rounded-[2px_2px_1px_1px] bg-[#8de1b8]" /><span className="block h-[11px] rounded-[2px_2px_1px_1px] bg-[#8de1b8] opacity-75" /></div>
           <div>
-            <p className="brand-name">DevDeck</p>
-            <p className="brand-caption">Local development cockpit</p>
+            <p className="text-[15px] font-semibold tracking-[-0.01em] text-[#f1f4f0]">DevDeck</p>
+            <p className="mt-0.5 text-[10px] uppercase tracking-[0.04em] text-[#687672]">Local development cockpit</p>
           </div>
         </div>
 
-        <nav className="side-nav" aria-label="Primary navigation">
-          <a className="side-nav__item side-nav__item--active" href="#projects">
-            <span className="nav-icon" aria-hidden="true">[]</span>
+        <nav className="grid gap-[5px]" aria-label="Primary navigation">
+          <a className="flex min-h-10 items-center gap-2.5 rounded-[7px] border border-[#293c35] bg-[#17231f] px-[11px] text-[13px] text-[#e3ebe6] no-underline" href="#projects">
+            <span className="w-[17px] text-center text-[17px] leading-none text-[#7dcba1]" aria-hidden="true">[]</span>
             Projects
-            <span className="nav-count">{projects.length}</span>
+            <span className="ml-auto font-mono text-[11px] text-[#61716a]">{projects.length}</span>
           </a>
-          <a className="side-nav__item side-nav__item--muted" href="#activity">
-            <span className="nav-icon" aria-hidden="true">o</span>
+          <a className="flex min-h-10 items-center gap-2.5 rounded-[7px] border border-transparent px-[11px] text-[13px] text-[#56615d] no-underline" href="#activity">
+            <span className="w-[17px] text-center text-[17px] leading-none text-[#7dcba1]" aria-hidden="true">o</span>
             Activity
-            <span className="coming-soon">Soon</span>
+            <span className="ml-auto text-[10px] uppercase text-[#4f5c57]">Soon</span>
           </a>
         </nav>
 
-        <div className="sidebar-footer">
-          <div className="connection-pill"><StatusDot state={connectionState} /><span>{connectionLabel}</span></div>
-          <p className="version-label">DEVDECK / NATIVE RUST</p>
+        <div className="mt-auto px-2">
+          <div className="flex items-center gap-2 rounded-md border border-[#202b29] px-2.5 py-[9px] text-[11px] text-[#87958e]"><StatusDot state={connectionState} /><span>{connectionLabel}</span></div>
+          <p className="mt-4 font-mono text-[9px] tracking-[0.11em] text-[#45524d]">DEVDECK / NATIVE RUST</p>
         </div>
       </aside>
 
-      <section className="content-panel">
-        <header className="topbar">
+      <section className="mx-auto w-full max-w-[1180px] px-[52px] pb-7 pt-[42px] max-[1050px]:px-8 max-[900px]:px-6">
+        <header className="mb-[34px] flex items-center justify-between">
           <div>
-            <p className="eyebrow">Workspace</p>
-            <h1>Projects</h1>
+            <p className={eyebrowClass}>Workspace</p>
+            <h1 className="mt-[7px] text-[clamp(28px,4vw,38px)] font-semibold tracking-[-0.04em] text-[#f2f4f1]">Projects</h1>
           </div>
-          <button className="primary-button" type="button" onClick={openCreateModal}>
-            <span aria-hidden="true">+</span>
+          <button className={primaryButtonClass} type="button" onClick={openCreateModal}>
+            <span className="text-lg font-normal leading-none" aria-hidden="true">+</span>
             Add project
           </button>
         </header>
 
-        {projectsError && <div className="inline-error" role="alert">{projectsError}</div>}
+        {projectsError && <div className="mb-4 rounded-md border border-[#5a3436] bg-[#24181b] px-[13px] py-[11px] text-[11px] text-[#e3a2a2]" role="alert">{projectsError}</div>}
 
-        <div className="workspace-layout" id="projects">
-          <section className="project-list-panel" aria-label="Registered projects">
-            <div className="panel-heading">
+        <div className="grid min-h-[488px] grid-cols-[minmax(260px,0.72fr)_minmax(0,1.55fr)] overflow-hidden rounded-[10px] border border-[#202b29] bg-[#0f1416] max-[900px]:grid-cols-[260px_minmax(0,1fr)]" id="projects">
+          <section className="border-r border-[#202b29]" aria-label="Registered projects">
+            <div className="flex items-start justify-between border-b border-[#1c2725] px-5 pb-[18px] pt-[22px]">
               <div>
-                <p className="eyebrow">Registered workspace</p>
-                <h3>{projects.length === 0 ? "No projects" : `${projects.length} project${projects.length === 1 ? "" : "s"}`}</h3>
+                <p className={eyebrowClass}>Registered workspace</p>
+                <h3 className="mt-2 text-[15px] font-semibold tracking-[-0.04em] text-[#dfe8e2]">{projects.length === 0 ? "No projects" : `${projects.length} project${projects.length === 1 ? "" : "s"}`}</h3>
               </div>
-              <span className="panel-kicker">LOCAL</span>
+              <span className="font-mono text-[9px] tracking-[0.12em] text-[#567367]">LOCAL</span>
             </div>
 
             {isProjectsLoading ? (
-              <div className="list-placeholder">Loading projects...</div>
+              <div className="grid min-h-[360px] place-items-center p-5 text-center text-[11px] text-[#697770]">Loading projects...</div>
             ) : projects.length === 0 ? (
-              <div className="list-placeholder list-placeholder--empty">
-                <span className="empty-list-icon" aria-hidden="true">+</span>
+              <div className="grid min-h-[360px] content-center justify-items-center gap-[11px] p-5 text-center text-[11px] text-[#697770]">
+                <span className="grid h-[34px] w-[34px] place-items-center rounded-[7px] border border-[#2a4035] bg-[#17241f] text-[19px] text-[#8de1b8]" aria-hidden="true">+</span>
                 <p>Your project registry is empty.</p>
-                <button className="text-button" type="button" onClick={openCreateModal}>Register a project</button>
+                <button className={textButtonClass} type="button" onClick={openCreateModal}>Register a project</button>
               </div>
             ) : (
-              <div className="project-list">
+              <div className="grid gap-0.5 p-2">
                 {projects.map((project) => (
                   <article
                     className={`project-row ${project.id === selectedProjectId ? "project-row--selected" : ""}`}
