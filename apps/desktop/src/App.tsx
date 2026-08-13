@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { GitBranch, Project, ProjectInput, ProjectRuntimeState, Service, ServiceLogEntry, ServiceRuntimeState, ServiceStatus } from "@devdeck/shared";
 import { getTauriErrorMessage } from "./lib/tauri/errors";
@@ -125,6 +125,7 @@ export function App() {
   const [pullError, setPullError] = useState<string | null>(null);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [activityProjectFilter, setActivityProjectFilter] = useState("all");
+  const runtimeRequestInFlight = useRef(false);
 
   const recordActivity = useCallback((entry: Omit<ActivityEntry, "id" | "timestamp">) => {
     const savedEntry: ActivityEntry = {
@@ -164,11 +165,17 @@ export function App() {
   }, []);
 
   const loadRuntime = useCallback(async () => {
+    if (runtimeRequestInFlight.current) {
+      return;
+    }
+    runtimeRequestInFlight.current = true;
     try {
       setRuntime(await getRuntime());
       setConnectionState("online");
     } catch {
       setConnectionState("offline");
+    } finally {
+      runtimeRequestInFlight.current = false;
     }
   }, []);
 
@@ -177,7 +184,7 @@ export function App() {
     void loadRuntime();
     const interval = window.setInterval(() => {
       void loadRuntime();
-    }, 2000);
+    }, 4000);
 
     return () => window.clearInterval(interval);
   }, [loadProjects, loadRuntime]);
