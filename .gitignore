@@ -1,0 +1,10 @@
+node_modules/
+dist/
+*.log
+
+apps/*/src-tauri/target/
+apps/*/src-tauri/gen/
+
+.env
+.env.*
+!.env.example
