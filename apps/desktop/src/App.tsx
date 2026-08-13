@@ -433,24 +433,24 @@ export function App() {
               <div className="grid gap-0.5 p-2">
                 {projects.map((project) => (
                   <article
-                    className={`project-row ${project.id === selectedProjectId ? "project-row--selected" : ""}`}
+                    className={`rounded-[7px] border px-3.5 py-3.5 transition hover:border-[#293d35] hover:bg-[#131e1b] ${project.id === selectedProjectId ? "border-[#345343] bg-[#17241f]" : "border-transparent"}`}
                     key={project.id}
                     onClick={() => setSelectedProjectId(project.id)}
                   >
-                    <div className="project-row__topline">
-                      <h4>{project.name}</h4>
-                      <div className="project-row__topline-right">
-                        <span className={`runtime-badge runtime-badge--${runtime.find((state) => state.projectId === project.id)?.status ?? "stopped"}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <h4 className="m-0 text-[13px] font-semibold text-[#dce8df]">{project.name}</h4>
+                      <div className="flex items-center gap-[9px]">
+                        <span className={`font-mono text-[8px] uppercase tracking-[0.04em] ${runtimeBadgeClasses[runtime.find((state) => state.projectId === project.id)?.status ?? "stopped"]}`}>
                           {statusLabel(runtime.find((state) => state.projectId === project.id)?.status ?? "stopped")}
                         </span>
-                        <div className="project-reorder-controls" onClick={(event) => event.stopPropagation()}>
-                          <button className="reorder-button" type="button" aria-label={`Move ${project.name} up`} disabled={projects.indexOf(project) === 0 || reorderingProjectId !== null} onClick={() => void moveProject(project.id, "up")}>↑</button>
-                          <button className="reorder-button" type="button" aria-label={`Move ${project.name} down`} disabled={projects.indexOf(project) === projects.length - 1 || reorderingProjectId !== null} onClick={() => void moveProject(project.id, "down")}>↓</button>
+                        <div className={`flex gap-0.5 opacity-40 transition hover:opacity-100 ${project.id === selectedProjectId ? "opacity-100" : "group-hover:opacity-100"}`} onClick={(event) => event.stopPropagation()}>
+                          <button className="grid h-[19px] w-[19px] place-items-center rounded border border-[#30443a] bg-[#15201c] p-0 text-[12px] leading-none text-[#8caf9c] transition hover:border-[#6b9b7d] hover:bg-[#20362a] hover:text-[#d3f2dc] disabled:cursor-default disabled:border-[#24302b] disabled:bg-[#111719] disabled:text-[#45544d]" type="button" aria-label={`Move ${project.name} up`} disabled={projects.indexOf(project) === 0 || reorderingProjectId !== null} onClick={() => void moveProject(project.id, "up")}>↑</button>
+                          <button className="grid h-[19px] w-[19px] place-items-center rounded border border-[#30443a] bg-[#15201c] p-0 text-[12px] leading-none text-[#8caf9c] transition hover:border-[#6b9b7d] hover:bg-[#20362a] hover:text-[#d3f2dc] disabled:cursor-default disabled:border-[#24302b] disabled:bg-[#111719] disabled:text-[#45544d]" type="button" aria-label={`Move ${project.name} down`} disabled={projects.indexOf(project) === projects.length - 1 || reorderingProjectId !== null} onClick={() => void moveProject(project.id, "down")}>↓</button>
                         </div>
                       </div>
                     </div>
-                    <p className="project-row__path" title={project.path}>{project.path}</p>
-                    <div className="project-row__meta">
+                    <p className="mt-2 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[9px] text-[#6c7b73]" title={project.path}>{project.path}</p>
+                    <div className="mt-[11px] flex gap-3 text-[10px] text-[#72847a]">
                       <span>{project.services.length} service{project.services.length === 1 ? "" : "s"}</span>
                       {project.services.some((service) => service.port) && <span>Ports configured</span>}
                     </div>
@@ -460,19 +460,19 @@ export function App() {
             )}
           </section>
 
-          <section className="project-detail-panel" aria-label="Project details">
+          <section className="min-w-0 px-[30px] py-7" aria-label="Project details">
             {selectedProject ? (
               <>
-                <header className="detail-heading">
+                <header className="flex items-start justify-between gap-5 border-b border-[#1d2826] pb-[25px]">
                   <div>
-                    <p className="eyebrow">Project detail</p>
-                    <h2>{selectedProject.name}</h2>
-                    <code className="detail-path" title={selectedProject.path}>{selectedProject.path}</code>
-                    <div className="detail-status"><StatusDot state={selectedRuntime?.status ?? "stopped"} /><span>{statusLabel(selectedRuntime?.status ?? "stopped")}</span></div>
+                    <p className={eyebrowClass}>Project detail</p>
+                    <h2 className="mt-2 text-[27px] font-semibold leading-[1.1] tracking-[-0.04em] text-[#eef5ef]">{selectedProject.name}</h2>
+                    <code className="mt-2.5 block max-w-[420px] overflow-hidden text-ellipsis whitespace-nowrap text-[10px] text-[#70847a]" title={selectedProject.path}>{selectedProject.path}</code>
+                    <div className="mt-[13px] flex items-center gap-[7px] text-[10px] text-[#8e9e94]"><StatusDot state={selectedRuntime?.status ?? "stopped"} /><span>{statusLabel(selectedRuntime?.status ?? "stopped")}</span></div>
                   </div>
-                  <div className="detail-actions">
+                  <div className="flex gap-[7px]">
                     <button
-                      className="secondary-button"
+                      className={secondaryButtonClass}
                       type="button"
                       disabled={selectedProject.services.length === 0 || processAction !== null || selectedRuntime?.status === "running" || selectedRuntime?.status === "starting"}
                       onClick={() => void runProjectAction(selectedProject.id, "start")}
@@ -480,35 +480,35 @@ export function App() {
                       Start all
                     </button>
                     <button
-                      className="ghost-button"
+                      className={ghostButtonClass}
                       type="button"
                       disabled={processAction !== null || (!selectedRuntime?.services || !Object.values(selectedRuntime.services).some((service) => service.status !== "stopped"))}
                       onClick={() => void runProjectAction(selectedProject.id, "stop")}
                     >
                       Stop all
                     </button>
-                    <button className="ghost-button" type="button" onClick={() => openEditModal(selectedProject)}>Edit</button>
-                    <button className="danger-button" type="button" disabled={deletingProjectId === selectedProject.id} onClick={() => void removeProject(selectedProject)}>
+                    <button className={ghostButtonClass} type="button" onClick={() => openEditModal(selectedProject)}>Edit</button>
+                    <button className={dangerButtonClass} type="button" disabled={deletingProjectId === selectedProject.id} onClick={() => void removeProject(selectedProject)}>
                       {deletingProjectId === selectedProject.id ? "Removing..." : "Remove"}
                     </button>
                   </div>
                 </header>
 
-                <div className="detail-section-heading">
+                <div className="flex items-end justify-between gap-4 py-[25px] pb-[15px]">
                   <div>
-                    <p className="eyebrow">Services</p>
-                    <h3>{selectedProject.services.length === 0 ? "No services yet" : "Registered services"}</h3>
+                    <p className={eyebrowClass}>Services</p>
+                    <h3 className="mt-[7px] text-[15px] font-semibold tracking-[-0.04em] text-[#dfe8e2]">{selectedProject.services.length === 0 ? "No services yet" : "Registered services"}</h3>
                   </div>
-                  <button className="text-button" type="button" onClick={() => openEditModal(selectedProject)}>Edit services</button>
+                  <button className={textButtonClass} type="button" onClick={() => openEditModal(selectedProject)}>Edit services</button>
                 </div>
 
                 {selectedProject.services.length === 0 ? (
-                  <div className="service-empty">
+                  <div className="grid justify-items-start gap-[15px] rounded-[7px] border border-dashed border-[#2a3b34] px-[18px] py-7 text-[11px] text-[#718078]">
                     <p>Define the commands DevDeck will manage for this project.</p>
-                    <button className="secondary-button" type="button" onClick={() => openEditModal(selectedProject)}>Add a service</button>
+                    <button className={secondaryButtonClass} type="button" onClick={() => openEditModal(selectedProject)}>Add a service</button>
                   </div>
                 ) : (
-                  <div className="service-list">
+                  <div className="grid gap-[7px]">
                     {selectedProject.services.map((service) => {
                       const serviceRuntime = getServiceRuntime(service.id);
                       const actionKey = `${selectedProject.id}:${service.id}`;
@@ -516,21 +516,21 @@ export function App() {
                       const canStop = serviceRuntime.status === "running" || serviceRuntime.status === "starting" || serviceRuntime.status === "error";
 
                       return (
-                        <article className="service-row" key={service.id}>
-                          <div className="service-row__status"><StatusDot state={serviceRuntime.status} /><span>{statusLabel(serviceRuntime.status)}</span></div>
-                          <div className="service-row__main">
-                            <h4>{service.name}</h4>
-                            <code>{service.command}</code>
-                            {service.cwd && <span className="service-cwd">cwd {service.cwd}</span>}
-                            {serviceRuntime.error && <span className="service-error">{serviceRuntime.error}</span>}
+                        <article className="grid min-h-[74px] grid-cols-[76px_minmax(0,1fr)_auto_auto] items-center gap-[15px] rounded-[7px] border border-[#27342f] bg-[#11191a] px-3.5 py-[13px] max-[1100px]:grid-cols-[76px_minmax(0,1fr)_auto]" key={service.id}>
+                          <div className="flex items-center gap-[7px] text-[10px] text-[#8d9c94]"><StatusDot state={serviceRuntime.status} /><span>{statusLabel(serviceRuntime.status)}</span></div>
+                          <div className="min-w-0">
+                            <h4 className="m-0 text-[13px] font-semibold text-[#dce8df]">{service.name}</h4>
+                            <code className="mt-[7px] block overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] text-[#a8c2b0]">{service.command}</code>
+                            {service.cwd && <span className="mt-1.5 inline-block font-mono text-[9px] text-[#607269]">cwd {service.cwd}</span>}
+                            {serviceRuntime.error && <span className="mt-1.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[9px] text-[#d18484]">{serviceRuntime.error}</span>}
                           </div>
-                          <div className="service-row__actions">
-                            <button className="service-action" type="button" disabled={isBusy || canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "start")}>Start</button>
-                            <button className="service-action" type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "stop")}>Stop</button>
-                            <button className="service-action" type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "restart")}>Restart</button>
-                            <button className={`service-action ${selectedLogServiceId === service.id ? "service-action--active" : ""}`} type="button" onClick={() => void selectLogService(selectedProject.id, service.id)}>Logs</button>
+                          <div className="flex gap-[5px]">
+                            <button className="min-h-[25px] rounded border border-[#2c4036] bg-[#16211d] px-[7px] font-mono text-[9px] text-[#89c5a2] transition hover:border-[#629276] hover:bg-[#1b3025] hover:text-[#c4eed3] disabled:cursor-default disabled:border-[#24302b] disabled:bg-[#111719] disabled:text-[#4d5d54]" type="button" disabled={isBusy || canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "start")}>Start</button>
+                            <button className="min-h-[25px] rounded border border-[#2c4036] bg-[#16211d] px-[7px] font-mono text-[9px] text-[#89c5a2] transition hover:border-[#629276] hover:bg-[#1b3025] hover:text-[#c4eed3] disabled:cursor-default disabled:border-[#24302b] disabled:bg-[#111719] disabled:text-[#4d5d54]" type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "stop")}>Stop</button>
+                            <button className="min-h-[25px] rounded border border-[#2c4036] bg-[#16211d] px-[7px] font-mono text-[9px] text-[#89c5a2] transition hover:border-[#629276] hover:bg-[#1b3025] hover:text-[#c4eed3] disabled:cursor-default disabled:border-[#24302b] disabled:bg-[#111719] disabled:text-[#4d5d54]" type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "restart")}>Restart</button>
+                            <button className={`min-h-[25px] rounded border px-[7px] font-mono text-[9px] transition ${selectedLogServiceId === service.id ? "border-[#6c9d7d] bg-[#20362a] text-[#d3f2dc]" : "border-[#2c4036] bg-[#16211d] text-[#89c5a2] hover:border-[#629276] hover:bg-[#1b3025] hover:text-[#c4eed3]"}`} type="button" onClick={() => void selectLogService(selectedProject.id, service.id)}>Logs</button>
                           </div>
-                          {service.port && <span className={`service-port service-port--${serviceRuntime.portStatus ?? "unknown"}`}>:{service.port} <small>{portStatusLabel(serviceRuntime.portStatus)}</small></span>}
+                          {service.port && <span className={`font-mono text-[11px] ${portClasses[serviceRuntime.portStatus ?? "unknown"]}`}>:{service.port} <small className="mt-1 block text-right text-[8px] uppercase text-[#6f8c7a]">{portStatusLabel(serviceRuntime.portStatus)}</small></span>}
                         </article>
                       );
                     })}
@@ -538,21 +538,21 @@ export function App() {
                 )}
 
                 {selectedLogService && (
-                  <section className="log-viewer" aria-label={`${selectedLogService.name} logs`}>
-                    <header className="log-viewer__header">
+                  <section className="mt-4 overflow-hidden rounded-[7px] border border-[#293a33] bg-[#0a0f10]" aria-label={`${selectedLogService.name} logs`}>
+                    <header className="flex items-center justify-between gap-3.5 border-b border-[#203029] bg-[#101918] px-[15px] py-[13px]">
                       <div>
-                        <p className="eyebrow">Live output</p>
-                        <h3>{selectedLogService.name}</h3>
+                        <p className={eyebrowClass}>Live output</p>
+                        <h3 className="mt-1.5 text-[13px] font-semibold text-[#dce9df]">{selectedLogService.name}</h3>
                       </div>
-                      <div className="log-viewer__connection"><StatusDot state={logSocketState === "connected" ? "running" : logSocketState === "connecting" ? "starting" : "stopped"} /><span>{logSocketState}</span></div>
+                      <div className="flex items-center gap-[7px] font-mono text-[9px] uppercase text-[#778a7e]"><StatusDot state={logSocketState === "connected" ? "running" : logSocketState === "connecting" ? "starting" : "stopped"} /><span>{logSocketState}</span></div>
                     </header>
-                    <div className="log-output">
+                    <div className="max-h-[235px] overflow-auto px-3.5 py-3 font-mono text-[10px] leading-[1.65] text-[#a5b8ab]">
                       {(serviceLogs[selectedLogService.id] ?? []).length === 0 ? (
-                        <span className="log-output__empty">No output yet. Start the service to stream its terminal output.</span>
+                        <span className="block px-1 py-[19px] text-[#60736a]">No output yet. Start the service to stream its terminal output.</span>
                       ) : (
                         serviceLogs[selectedLogService.id].map((entry, index) => (
-                          <div className={`log-line log-line--${entry.stream}`} key={`${entry.timestamp}-${index}`}>
-                            <time>{new Date(entry.timestamp).toLocaleTimeString()}</time>
+                          <div className={`grid grid-cols-[70px_minmax(0,1fr)] gap-2.5 whitespace-pre-wrap break-words ${entry.stream === "stderr" ? "text-[#d6a3a3]" : ""}`} key={`${entry.timestamp}-${index}`}>
+                            <time className={entry.stream === "stderr" ? "text-[#8f6565]" : "text-[#50645a]"}>{new Date(entry.timestamp).toLocaleTimeString()}</time>
                             <span>{entry.message}</span>
                           </div>
                         ))
