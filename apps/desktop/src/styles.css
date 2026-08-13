@@ -287,12 +287,24 @@ h3 { margin-top: 7px; color: #dfe8e2; font-size: 16px; }
 .service-action { min-height: 25px; padding: 0 7px; border: 1px solid #2c4036; border-radius: 4px; color: #89c5a2; background: #16211d; font-family: "Cascadia Code", Consolas, monospace; font-size: 9px; }
 .service-action:hover:not(:disabled) { border-color: #629276; color: #c4eed3; background: #1b3025; }
 .service-action:disabled { cursor: default; color: #4d5d54; border-color: #24302b; background: #111719; }
+.service-action--active { border-color: #6c9d7d; color: #d3f2dc; background: #20362a; }
 .service-port { color: #8bd4a8; font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; }
 .service-empty { display: grid; justify-items: start; gap: 15px; padding: 28px 18px; border: 1px dashed #2a3b34; border-radius: 7px; color: #718078; font-size: 11px; }
 .service-empty p { margin: 0; }
 .detail-note { display: flex; align-items: center; gap: 9px; margin-top: 28px; padding: 12px 13px; border: 1px solid #26352e; border-radius: 6px; color: #6f8177; background: rgba(24, 37, 31, 0.4); font-size: 10px; }
 .detail-note p { margin: 0; }
 .detail-note__icon { display: grid; width: 16px; height: 16px; place-items: center; border: 1px solid #527563; border-radius: 50%; color: #8bd4a8; font-family: Georgia, serif; font-size: 11px; }
+
+.log-viewer { overflow: hidden; margin-top: 16px; border: 1px solid #293a33; border-radius: 7px; background: #0a0f10; }
+.log-viewer__header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 15px; border-bottom: 1px solid #203029; background: #101918; }
+.log-viewer__header h3 { margin-top: 6px; color: #dce9df; font-size: 13px; }
+.log-viewer__connection { display: flex; align-items: center; gap: 7px; color: #778a7e; font-family: "Cascadia Code", Consolas, monospace; font-size: 9px; text-transform: uppercase; }
+.log-output { max-height: 235px; overflow: auto; padding: 12px 14px; color: #a5b8ab; font-family: "Cascadia Code", Consolas, monospace; font-size: 10px; line-height: 1.65; }
+.log-output__empty { display: block; padding: 19px 4px; color: #60736a; }
+.log-line { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 10px; white-space: pre-wrap; word-break: break-word; }
+.log-line time { color: #50645a; }
+.log-line--stderr { color: #d6a3a3; }
+.log-line--stderr time { color: #8f6565; }
 
 .detail-empty { display: grid; min-height: 430px; place-content: center; justify-items: center; gap: 8px; color: #718078; text-align: center; }
 .detail-empty .empty-state__icon { margin-bottom: 6px; }

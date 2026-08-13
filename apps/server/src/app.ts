@@ -92,6 +92,14 @@ export function createApp(projectService = new ProjectService(), processManager 
     }
   });
 
+  app.get("/api/projects/:projectId/services/:serviceId/logs", async (request, response) => {
+    try {
+      response.json(await processManager.getLogs(request.params.projectId, request.params.serviceId));
+    } catch (error) {
+      sendProjectError(error, response);
+    }
+  });
+
   app.post("/api/projects/:projectId/start", async (request, response) => {
     try {
       await processManager.startAll(request.params.projectId);
