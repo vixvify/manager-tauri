@@ -3,15 +3,12 @@ use crate::services::process_service::tokenize_command;
 use std::path::Path;
 use std::process::{Command, Output};
 
-pub fn is_detached_compose(command: &str) -> bool {
+pub fn is_compose_up(command: &str) -> bool {
     let Ok(tokens) = tokenize_command(command) else {
         return false;
     };
     compose_command_start(&tokens).is_some()
-        && tokens.iter().any(|token| token == "up")
-        && tokens
-            .iter()
-            .any(|token| token == "-d" || token == "--detach")
+        && tokens.iter().any(|token| token.eq_ignore_ascii_case("up"))
 }
 
 pub fn is_running(command: &str, cwd: &Path) -> AppResult<bool> {
@@ -70,7 +67,16 @@ fn run_compose(command: &str, cwd: &Path, action: ComposeAction) -> AppResult<Ou
         .ok_or_else(|| AppError::InvalidCommand(command.into()))?;
     let mut args = tokens[command_start..up_index].to_vec();
     match action {
-        ComposeAction::Start => args.extend(tokens[up_index..].iter().cloned()),
+        ComposeAction::Start => {
+            args.push("up".into());
+            if !tokens[up_index + 1..]
+                .iter()
+                .any(|token| token == "-d" || token == "--detach")
+            {
+                args.push("-d".into());
+            }
+            args.extend(tokens[up_index + 1..].iter().cloned());
+        }
         ComposeAction::Status => {
             args.extend([
                 "ps".into(),
@@ -211,6 +217,12 @@ enum ComposeAction {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recognizes_compose_up_with_or_without_detached_mode() {
+        assert!(is_compose_up("docker compose up database"));
+        assert!(is_compose_up("docker compose up -d database"));
+    }
 
     #[test]
     fn uses_down_for_a_whole_compose_project() {

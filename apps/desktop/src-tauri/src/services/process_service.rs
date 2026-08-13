@@ -26,7 +26,7 @@ pub fn get_project_runtime(state: &AppState, project_id: &str) -> AppResult<Proj
     let mut services = std::collections::HashMap::new();
     for service in &project.services {
         let mut runtime = get_service_runtime(state, project_id, service);
-        if docker_service::is_detached_compose(&service.command) {
+        if docker_service::is_compose_up(&service.command) {
             if let Ok(cwd) = resolve_working_directory(&project.path, service.cwd.as_deref()) {
                 match docker_service::is_running(&service.command, &cwd) {
                     Ok(true) => {
@@ -170,7 +170,7 @@ pub fn start_service(
     }
 
     let cwd = resolve_working_directory(&project.path, service.cwd.as_deref())?;
-    let is_docker = docker_service::is_detached_compose(&service.command);
+    let is_docker = docker_service::is_compose_up(&service.command);
     if is_docker {
         match docker_service::is_running(&service.command, &cwd) {
             Ok(true) => {
