@@ -5,6 +5,10 @@ export function getProjects() {
   return invoke<Project[]>("get_projects");
 }
 
+export function getProject(projectId: string) {
+  return invoke<Project>("get_project", { projectId });
+}
+
 export function addProject(input: ProjectInput) {
   return invoke<Project>("add_project", { input });
 }

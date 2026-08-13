@@ -23,16 +23,36 @@ pub fn get_runtime(state: &AppState) -> AppResult<Vec<ProjectRuntimeState>> {
 
 pub fn get_project_runtime(state: &AppState, project_id: &str) -> AppResult<ProjectRuntimeState> {
     let project = project_service::get_project(state, project_id)?;
-    let services = project
-        .services
-        .iter()
-        .map(|service| {
-            (
-                service.id.clone(),
-                get_service_runtime(state, project_id, service),
-            )
-        })
-        .collect::<std::collections::HashMap<_, _>>();
+    let mut services = std::collections::HashMap::new();
+    for service in &project.services {
+        let mut runtime = get_service_runtime(state, project_id, service);
+        if matches!(runtime.status, ServiceStatus::Stopped)
+            && docker_service::is_detached_compose(&service.command)
+        {
+            if let Ok(cwd) = resolve_working_directory(&project.path, service.cwd.as_deref()) {
+                match docker_service::is_running(&service.command, &cwd) {
+                    Ok(true) => {
+                        runtime =
+                            runtime_state(service, ServiceStatus::Running, RuntimeMode::Docker);
+                        runtime.port_status = port_status(service.port)?;
+                    }
+                    Ok(false) => {}
+                    Err(error) => {
+                        runtime = runtime_state(service, ServiceStatus::Error, RuntimeMode::Docker);
+                        runtime.error = Some(error.to_string());
+                    }
+                }
+            }
+        }
+        if !matches!(runtime.status, ServiceStatus::Stopped) {
+            if let Ok(mut guard) = state.inner.lock() {
+                guard
+                    .runtime
+                    .insert(key(project_id, &service.id), runtime.clone());
+            }
+        }
+        services.insert(service.id.clone(), runtime);
+    }
     let statuses = services
         .values()
         .map(|service| &service.status)
@@ -134,7 +154,11 @@ pub fn start_service(
         .cloned()
         .ok_or_else(|| AppError::ServiceNotFound(service_id.into()))?;
     let service_key = key(project_id, service_id);
-    let current = get_service_runtime(state, project_id, &service);
+    let current = get_project_runtime(state, project_id)?
+        .services
+        .get(service_id)
+        .cloned()
+        .unwrap_or_else(|| get_service_runtime(state, project_id, &service));
     if matches!(
         current.status,
         ServiceStatus::Running | ServiceStatus::Starting
@@ -288,7 +312,11 @@ pub fn stop_service(
         .cloned()
         .ok_or_else(|| AppError::ServiceNotFound(service_id.into()))?;
     let service_key = key(project_id, service_id);
-    let current = get_service_runtime(state, project_id, &service);
+    let current = get_project_runtime(state, project_id)?
+        .services
+        .get(service_id)
+        .cloned()
+        .unwrap_or_else(|| get_service_runtime(state, project_id, &service));
     let managed = state
         .inner
         .lock()
@@ -378,20 +406,20 @@ fn get_service_runtime(
     _project_id: &str,
     service: &Service,
 ) -> ServiceRuntimeState {
-    let guard = state.inner.lock().expect("state lock poisoned");
-    guard
-        .runtime
-        .get(&key(_project_id, &service.id))
-        .cloned()
-        .unwrap_or_else(|| ServiceRuntimeState {
-            service_id: service.id.clone(),
-            status: ServiceStatus::Stopped,
-            mode: None,
-            pid: None,
-            port: service.port,
-            port_status: service.port.map(|_| PortStatus::Unknown),
-            error: None,
-        })
+    let runtime = state
+        .inner
+        .lock()
+        .ok()
+        .and_then(|guard| guard.runtime.get(&key(_project_id, &service.id)).cloned());
+    runtime.unwrap_or_else(|| ServiceRuntimeState {
+        service_id: service.id.clone(),
+        status: ServiceStatus::Stopped,
+        mode: None,
+        pid: None,
+        port: service.port,
+        port_status: service.port.map(|_| PortStatus::Unknown),
+        error: None,
+    })
 }
 
 fn set_runtime_state(

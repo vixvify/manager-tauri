@@ -10,6 +10,11 @@ pub fn get_projects(state: State<'_, AppState>) -> AppResult<Vec<Project>> {
 }
 
 #[tauri::command]
+pub fn get_project(project_id: String, state: State<'_, AppState>) -> AppResult<Project> {
+    project_service::get_project(&state, &project_id)
+}
+
+#[tauri::command]
 pub fn add_project(input: ProjectInput, state: State<'_, AppState>) -> AppResult<Project> {
     project_service::add_project(&state, input)
 }
