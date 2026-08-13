@@ -164,6 +164,9 @@ fn normalize_service(input: ServiceInput, existing: Option<&Vec<Service>>) -> Ap
         id,
         name,
         command,
+        build_command: input
+            .build_command
+            .and_then(|value| (!value.trim().is_empty()).then(|| value.trim().to_string())),
         cwd: input
             .cwd
             .and_then(|value| (!value.trim().is_empty()).then(|| value.trim().to_string())),

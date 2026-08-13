@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { ProjectRuntimeState, ServiceLogEntry, ServiceRuntimeState } from "@devdeck/shared";
+import type { BuildResult, ProjectRuntimeState, ServiceLogEntry, ServiceRuntimeState } from "@devdeck/shared";
 
 export function getRuntime() {
   return invoke<ProjectRuntimeState[]>("get_runtime");
@@ -27,6 +27,10 @@ export function stopService(projectId: string, serviceId: string) {
 
 export function restartService(projectId: string, serviceId: string) {
   return invoke<ServiceRuntimeState>("restart_service", { projectId, serviceId });
+}
+
+export function buildService(projectId: string, serviceId: string) {
+  return invoke<BuildResult>("build_service", { projectId, serviceId });
 }
 
 export function getServiceLogs(projectId: string, serviceId: string) {

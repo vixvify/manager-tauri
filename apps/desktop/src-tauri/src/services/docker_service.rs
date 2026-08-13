@@ -25,8 +25,29 @@ pub fn start(command: &str, cwd: &Path) -> AppResult<Output> {
     }
 }
 
+pub fn build(command: &str, cwd: &Path) -> AppResult<Output> {
+    let output = run_compose(command, cwd, ComposeAction::Build)?;
+    if output.status.success() {
+        Ok(output)
+    } else {
+        Err(command_error(command, &output))
+    }
+}
+
+pub fn build_description(command: &str) -> AppResult<String> {
+    let tokens = tokenize_command(command)?;
+    let up_index = tokens
+        .iter()
+        .position(|token| token.eq_ignore_ascii_case("up"))
+        .ok_or_else(|| AppError::InvalidCommand(command.into()))?;
+    let mut build_tokens = tokens[..up_index].to_vec();
+    build_tokens.push("build".into());
+    build_tokens.extend(service_names(&tokens[up_index + 1..]));
+    Ok(build_tokens.join(" "))
+}
+
 pub fn stop(command: &str, cwd: &Path) -> AppResult<()> {
-    let output = run_compose(command, cwd, ComposeAction::Down)?;
+    let output = run_compose(command, cwd, ComposeAction::Stop)?;
     if !output.status.success() {
         return Err(command_error(command, &output));
     }
@@ -55,6 +76,15 @@ pub fn stop(command: &str, cwd: &Path) -> AppResult<()> {
         message: "Docker Compose reported success, but the requested container is still running."
             .into(),
     })
+}
+
+pub fn down(command: &str, cwd: &Path) -> AppResult<()> {
+    let output = run_compose(command, cwd, ComposeAction::Down)?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(command_error(command, &output))
+    }
 }
 
 fn run_compose(command: &str, cwd: &Path, action: ComposeAction) -> AppResult<Output> {
@@ -92,6 +122,15 @@ fn run_compose(command: &str, cwd: &Path, action: ComposeAction) -> AppResult<Ou
         }
         ComposeAction::Kill => {
             args.push("kill".into());
+            args.extend(service_names(&tokens[up_index + 1..]));
+        }
+        ComposeAction::Build => {
+            args.push("build".into());
+            args.extend(service_names(&tokens[up_index + 1..]));
+        }
+        ComposeAction::Stop => {
+            args.push("stop".into());
+            args.extend(service_names(&tokens[up_index + 1..]));
         }
     }
     if !matches!(action, ComposeAction::Start) {
@@ -212,6 +251,8 @@ enum ComposeAction {
     Status,
     Down,
     Kill,
+    Build,
+    Stop,
 }
 
 #[cfg(test)]
@@ -234,5 +275,23 @@ mod tests {
     fn recognizes_legacy_docker_compose() {
         let tokens = tokenize_command("docker-compose up -d").expect("parse compose command");
         assert_eq!(compose_command_start(&tokens), Some(1));
+    }
+
+    #[test]
+    fn derives_build_command_from_compose_start_command() {
+        assert_eq!(
+            build_description("docker compose --env-file local.env up -d backend proxy")
+                .expect("derive build command"),
+            "docker compose --env-file local.env build backend proxy"
+        );
+    }
+
+    #[test]
+    fn individual_stop_keeps_other_compose_services_unaddressed() {
+        let tokens = tokenize_command("docker compose up -d database").expect("parse command");
+        assert_eq!(service_names(&tokens[3..]), vec!["database"]);
+
+        let tokens = tokenize_command("docker compose up -d backend proxy").expect("parse command");
+        assert_eq!(service_names(&tokens[3..]), vec!["backend", "proxy"]);
     }
 }

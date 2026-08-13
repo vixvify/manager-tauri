@@ -1,16 +1,30 @@
 import { useCallback, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { Project, ProjectInput, ProjectRuntimeState, Service, ServiceLogEntry, ServiceRuntimeState, ServiceStatus } from "@devdeck/shared";
+import type { GitBranch, Project, ProjectInput, ProjectRuntimeState, Service, ServiceLogEntry, ServiceRuntimeState, ServiceStatus } from "@devdeck/shared";
 import { getTauriErrorMessage } from "./lib/tauri/errors";
 import { subscribeToDevDeckEvents } from "./lib/tauri/events";
-import { getRuntime, getServiceLogs, restartService, startProject, startService, stopProject, stopService } from "./lib/tauri/processes";
+import { getGitBranches, pullProject } from "./lib/tauri/git";
+import { buildService, getRuntime, getServiceLogs, restartService, startProject, startService, stopProject, stopService } from "./lib/tauri/processes";
 import { addProject, getProjects, removeProject as removeRegisteredProject, reorderProjects, updateProject } from "./lib/tauri/projects";
 
 type ConnectionState = "checking" | "online" | "offline";
 type ModalMode = "create" | "edit" | null;
 type ProjectForm = Omit<ProjectInput, "services"> & { services: Service[] };
-type ProcessAction = "start" | "stop" | "restart";
+type ProcessAction = "start" | "stop" | "restart" | "build";
 type LogSocketState = "connecting" | "connected" | "disconnected";
+type ActivityKind = "start" | "stop" | "restart" | "build" | "pull" | "status" | "project" | "error";
+type ActivityState = "working" | "success" | "error" | "info";
+
+interface ActivityEntry {
+  id: string;
+  timestamp: string;
+  projectId?: string;
+  projectName: string;
+  serviceName?: string;
+  kind: ActivityKind;
+  state: ActivityState;
+  message: string;
+}
 
 function createId() {
   return typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -24,7 +38,7 @@ function createFormFromProject(project: Project): ProjectForm {
   return {
     name: project.name,
     path: project.path,
-    services: project.services.map((service) => ({ ...service, cwd: service.cwd ?? "" }))
+    services: project.services.map((service) => ({ ...service, buildCommand: service.buildCommand ?? "", cwd: service.cwd ?? "" }))
   };
 }
 
@@ -74,6 +88,18 @@ function portStatusLabel(status: ServiceRuntimeState["portStatus"]) {
   return status === "listening" ? "listening" : status === "checking" ? "checking" : status === "occupied" ? "occupied" : status === "available" ? "not listening" : "";
 }
 
+function activityKindLabel(kind: ActivityKind) {
+  return kind === "status" ? "STATUS" : kind === "project" ? "PROJECT" : kind.toUpperCase();
+}
+
+function processActionLabel(action: ProcessAction) {
+  return action.charAt(0).toUpperCase() + action.slice(1);
+}
+
+function activityTime(timestamp: string) {
+  return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
 export function App() {
   const [connectionState, setConnectionState] = useState<ConnectionState>("checking");
   const [projects, setProjects] = useState<Project[]>([]);
@@ -84,6 +110,7 @@ export function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isProjectsLoading, setIsProjectsLoading] = useState(true);
   const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [projectsNotice, setProjectsNotice] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<ModalMode>(null);
   const [form, setForm] = useState<ProjectForm>(createEmptyForm);
   const [formError, setFormError] = useState<string | null>(null);
@@ -91,6 +118,27 @@ export function App() {
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [processAction, setProcessAction] = useState<string | null>(null);
   const [reorderingProjectId, setReorderingProjectId] = useState<string | null>(null);
+  const [isPullModalOpen, setIsPullModalOpen] = useState(false);
+  const [gitBranches, setGitBranches] = useState<GitBranch[]>([]);
+  const [selectedGitBranch, setSelectedGitBranch] = useState("");
+  const [isPulling, setIsPulling] = useState(false);
+  const [pullError, setPullError] = useState<string | null>(null);
+  const [activity, setActivity] = useState<ActivityEntry[]>([]);
+  const [activityProjectFilter, setActivityProjectFilter] = useState("all");
+
+  const recordActivity = useCallback((entry: Omit<ActivityEntry, "id" | "timestamp">) => {
+    const savedEntry: ActivityEntry = {
+      ...entry,
+      id: createId(),
+      timestamp: new Date().toISOString()
+    };
+    setActivity((current) => [savedEntry, ...current].slice(0, 100));
+    return savedEntry.id;
+  }, []);
+
+  const updateActivity = useCallback((activityId: string, changes: Partial<Pick<ActivityEntry, "state" | "message">>) => {
+    setActivity((current) => current.map((entry) => entry.id === activityId ? { ...entry, ...changes } : entry));
+  }, []);
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
   const selectedRuntime = runtime.find((state) => state.projectId === selectedProjectId);
@@ -155,6 +203,23 @@ export function App() {
         }
       },
       (payload) => {
+        if (!disposed) {
+          const project = projects.find((candidate) => candidate.id === payload.projectId);
+          const service = project?.services.find((candidate) => candidate.id === payload.serviceId);
+          const statusState: ActivityState = payload.status === "error"
+            ? "error"
+            : payload.status === "running" || payload.status === "stopped"
+              ? "success"
+              : "working";
+          recordActivity({
+            projectId: payload.projectId,
+            projectName: project?.name ?? payload.projectId,
+            serviceName: service?.name ?? payload.serviceId,
+            kind: payload.status === "error" ? "error" : "status",
+            state: statusState,
+            message: payload.error ?? `Service ${payload.status}`
+          });
+        }
         if (!disposed && payload.projectId === selectedProjectId) {
           void loadRuntime();
         }
@@ -173,7 +238,7 @@ export function App() {
       unsubscribe?.();
       setLogSocketState("disconnected");
     };
-  }, [loadRuntime, selectedProjectId]);
+  }, [loadRuntime, projects, recordActivity, selectedProjectId]);
 
   useEffect(() => {
     setSelectedLogServiceId(null);
@@ -208,7 +273,7 @@ export function App() {
   function addService() {
     setForm((current) => ({
       ...current,
-      services: [...current.services, { id: createId(), name: "", command: "", cwd: "" }]
+      services: [...current.services, { id: createId(), name: "", command: "", buildCommand: "", cwd: "" }]
     }));
   }
 
@@ -240,6 +305,7 @@ export function App() {
         id: modalMode === "edit" ? service.id : undefined,
         name: service.name,
         command: service.command,
+        buildCommand: service.buildCommand?.trim() || undefined,
         cwd: service.cwd?.trim() || undefined,
         port: service.port
       }))
@@ -254,6 +320,13 @@ export function App() {
         ? current.map((project) => project.id === savedProject.id ? savedProject : project)
         : [...current, savedProject]);
       setSelectedProjectId(savedProject.id);
+      recordActivity({
+        projectId: savedProject.id,
+        projectName: savedProject.name,
+        kind: "project",
+        state: "success",
+        message: `${modalMode === "edit" ? "Updated" : "Added"} project configuration`
+      });
       setModalMode(null);
     } catch (error) {
       setFormError(getTauriErrorMessage(error, "Unable to save project."));
@@ -271,6 +344,13 @@ export function App() {
 
     try {
       await removeRegisteredProject(project.id);
+      recordActivity({
+        projectId: project.id,
+        projectName: project.name,
+        kind: "project",
+        state: "success",
+        message: "Removed project from DevDeck"
+      });
       const remainingProjects = projects.filter((candidate) => candidate.id !== project.id);
       setProjects(remainingProjects);
       setSelectedProjectId((currentId) => currentId === project.id ? remainingProjects[0]?.id ?? null : currentId);
@@ -296,6 +376,13 @@ export function App() {
     try {
       const savedProjects = await reorderProjects(reorderedProjects.map((project) => project.id));
       setProjects(savedProjects);
+      recordActivity({
+        projectId,
+        projectName: savedProjects.find((project) => project.id === projectId)?.name ?? projectId,
+        kind: "project",
+        state: "success",
+        message: "Reordered project list"
+      });
     } catch (error) {
       setProjectsError(getTauriErrorMessage(error, "Unable to reorder projects."));
     } finally {
@@ -310,18 +397,36 @@ export function App() {
   async function runServiceAction(projectId: string, serviceId: string, action: ProcessAction) {
     const actionKey = `${projectId}:${serviceId}`;
     setProcessAction(actionKey);
+    setProjectsNotice(null);
+    const project = projects.find((candidate) => candidate.id === projectId);
+    const serviceName = project?.services.find((service) => service.id === serviceId)?.name ?? "service";
+    const activityId = recordActivity({
+      projectId,
+      projectName: project?.name ?? projectId,
+      serviceName,
+      kind: action,
+      state: "working",
+      message: `${processActionLabel(action)} ${serviceName}`
+    });
 
     try {
       if (action === "start") {
         await startService(projectId, serviceId);
       } else if (action === "stop") {
         await stopService(projectId, serviceId);
+      } else if (action === "build") {
+        await buildService(projectId, serviceId);
+        setProjectsError(null);
+        setProjectsNotice(`Build completed for ${serviceName}.`);
       } else {
         await restartService(projectId, serviceId);
       }
+      updateActivity(activityId, { state: "success", message: `${processActionLabel(action)} completed for ${serviceName}` });
       await loadRuntime();
     } catch (error) {
-      setProjectsError(getTauriErrorMessage(error, `Unable to ${action} service.`));
+      const message = getTauriErrorMessage(error, `Unable to ${action} service.`);
+      updateActivity(activityId, { state: "error", message });
+      setProjectsError(message);
       await loadRuntime();
     } finally {
       setProcessAction(null);
@@ -330,6 +435,15 @@ export function App() {
 
   async function runProjectAction(projectId: string, action: "start" | "stop") {
     setProcessAction(`${projectId}:all`);
+    setProjectsNotice(null);
+    const project = projects.find((candidate) => candidate.id === projectId);
+    const activityId = recordActivity({
+      projectId,
+      projectName: project?.name ?? projectId,
+      kind: action,
+      state: "working",
+      message: `${processActionLabel(action)} all services`
+    });
 
     try {
       if (action === "start") {
@@ -337,9 +451,12 @@ export function App() {
       } else {
         await stopProject(projectId);
       }
+      updateActivity(activityId, { state: "success", message: `${processActionLabel(action)} completed for all services` });
       await loadRuntime();
     } catch (error) {
-      setProjectsError(getTauriErrorMessage(error, `Unable to ${action} project.`));
+      const message = getTauriErrorMessage(error, `Unable to ${action} project.`);
+      updateActivity(activityId, { state: "error", message });
+      setProjectsError(message);
       await loadRuntime();
     } finally {
       setProcessAction(null);
@@ -361,11 +478,69 @@ export function App() {
     }
   }
 
+  async function openPullModal() {
+    if (!selectedProject) {
+      return;
+    }
+    setPullError(null);
+    setGitBranches([]);
+    setSelectedGitBranch("");
+    setIsPullModalOpen(true);
+
+    try {
+      const branches = await getGitBranches(selectedProject.id);
+      setGitBranches(branches);
+      setSelectedGitBranch(branches.find((branch) => branch.current)?.name ?? branches[0]?.name ?? "");
+    } catch (error) {
+      setPullError(getTauriErrorMessage(error, "Unable to load Git branches."));
+    }
+  }
+
+  function closePullModal() {
+    if (!isPulling) {
+      setIsPullModalOpen(false);
+    }
+  }
+
+  async function runPull(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedProject || !selectedGitBranch) {
+      return;
+    }
+    const project = selectedProject;
+    const branch = selectedGitBranch;
+    const activityId = recordActivity({
+      projectId: project.id,
+      projectName: project.name,
+      kind: "pull",
+      state: "working",
+      message: `Pulling origin/${branch}`
+    });
+    setIsPulling(true);
+    setPullError(null);
+    try {
+      await pullProject(project.id, branch);
+      updateActivity(activityId, { state: "success", message: `Pulled origin/${branch}` });
+      setProjectsError(null);
+      setProjectsNotice(`Pulled origin/${branch} into ${project.name}.`);
+      setIsPullModalOpen(false);
+    } catch (error) {
+      const message = getTauriErrorMessage(error, "Unable to pull Git changes.");
+      updateActivity(activityId, { state: "error", message });
+      setPullError(message);
+    } finally {
+      setIsPulling(false);
+    }
+  }
+
   const connectionLabel = {
     checking: "Checking native bridge",
     online: "Tauri commands ready",
     offline: "Tauri commands unavailable"
   }[connectionState];
+  const visibleActivity = activityProjectFilter === "all"
+    ? activity
+    : activity.filter((entry) => entry.projectId === activityProjectFilter);
 
   return (
     <main className="grid min-h-screen grid-cols-[248px_minmax(0,1fr)] bg-[radial-gradient(circle_at_75%_-20%,rgba(55,78,71,0.18),transparent_38%),#0b0d10]">
@@ -387,7 +562,7 @@ export function App() {
           <a className="flex min-h-10 items-center gap-2.5 rounded-[7px] border border-transparent px-[11px] text-[13px] text-[#56615d] no-underline" href="#activity">
             <span className="w-[17px] text-center text-[17px] leading-none text-[#7dcba1]" aria-hidden="true">o</span>
             Activity
-            <span className="ml-auto text-[10px] uppercase text-[#4f5c57]">Soon</span>
+            <span className="ml-auto font-mono text-[11px] text-[#61716a]">{activity.length}</span>
           </a>
         </nav>
 
@@ -403,13 +578,17 @@ export function App() {
             <p className={eyebrowClass}>Workspace</p>
             <h1 className="mt-[7px] text-[clamp(28px,4vw,38px)] font-semibold tracking-[-0.04em] text-[#f2f4f1]">Projects</h1>
           </div>
-          <button className={primaryButtonClass} type="button" onClick={openCreateModal}>
-            <span className="text-lg font-normal leading-none" aria-hidden="true">+</span>
-            Add project
-          </button>
+          <div className="flex gap-2">
+            {selectedProject && <button className={ghostButtonClass} type="button" onClick={() => void openPullModal()}>Pull</button>}
+            <button className={primaryButtonClass} type="button" onClick={openCreateModal}>
+              <span className="text-lg font-normal leading-none" aria-hidden="true">+</span>
+              Add project
+            </button>
+          </div>
         </header>
 
         {projectsError && <div className="mb-4 rounded-md border border-[#5a3436] bg-[#24181b] px-[13px] py-[11px] text-[11px] text-[#e3a2a2]" role="alert">{projectsError}</div>}
+        {projectsNotice && <div className="mb-4 rounded-md border border-[#2e5b43] bg-[#14261d] px-[13px] py-[11px] text-[11px] text-[#a9e2b9]" role="status">{projectsNotice}</div>}
 
         <div className="grid min-h-[488px] grid-cols-[minmax(260px,0.72fr)_minmax(0,1.55fr)] overflow-hidden rounded-[10px] border border-[#202b29] bg-[#0f1416] max-[900px]:grid-cols-[260px_minmax(0,1fr)]" id="projects">
           <section className="border-r border-[#202b29]" aria-label="Registered projects">
@@ -521,6 +700,7 @@ export function App() {
                           <div className="min-w-0">
                             <h4 className="m-0 text-[13px] font-semibold text-[#dce8df]">{service.name}</h4>
                             <code className="mt-[7px] block overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] text-[#a8c2b0]">{service.command}</code>
+                            <span className="mt-1.5 block overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[9px] text-[#607269]">build {service.buildCommand ?? "docker compose build"}</span>
                             {service.cwd && <span className="mt-1.5 inline-block font-mono text-[9px] text-[#607269]">cwd {service.cwd}</span>}
                             {serviceRuntime.error && <span className="mt-1.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[9px] text-[#d18484]">{serviceRuntime.error}</span>}
                           </div>
@@ -528,6 +708,7 @@ export function App() {
                             <button className="min-h-[25px] rounded border border-[#2c4036] bg-[#16211d] px-[7px] font-mono text-[9px] text-[#89c5a2] transition hover:border-[#629276] hover:bg-[#1b3025] hover:text-[#c4eed3] disabled:cursor-default disabled:border-[#24302b] disabled:bg-[#111719] disabled:text-[#4d5d54]" type="button" disabled={isBusy || canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "start")}>Start</button>
                             <button className="min-h-[25px] rounded border border-[#2c4036] bg-[#16211d] px-[7px] font-mono text-[9px] text-[#89c5a2] transition hover:border-[#629276] hover:bg-[#1b3025] hover:text-[#c4eed3] disabled:cursor-default disabled:border-[#24302b] disabled:bg-[#111719] disabled:text-[#4d5d54]" type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "stop")}>Stop</button>
                             <button className="min-h-[25px] rounded border border-[#2c4036] bg-[#16211d] px-[7px] font-mono text-[9px] text-[#89c5a2] transition hover:border-[#629276] hover:bg-[#1b3025] hover:text-[#c4eed3] disabled:cursor-default disabled:border-[#24302b] disabled:bg-[#111719] disabled:text-[#4d5d54]" type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "restart")}>Restart</button>
+                            <button className="min-h-[25px] rounded border border-[#34483e] bg-[#18231f] px-[7px] font-mono text-[9px] text-[#b6d8c0] transition hover:border-[#6d9b7c] hover:bg-[#20362a] hover:text-[#e0f4e5] disabled:cursor-default disabled:border-[#24302b] disabled:bg-[#111719] disabled:text-[#4d5d54]" type="button" disabled={isBusy} onClick={() => void runServiceAction(selectedProject.id, service.id, "build")}>Build</button>
                             <button className={`min-h-[25px] rounded border px-[7px] font-mono text-[9px] transition ${selectedLogServiceId === service.id ? "border-[#6c9d7d] bg-[#20362a] text-[#d3f2dc]" : "border-[#2c4036] bg-[#16211d] text-[#89c5a2] hover:border-[#629276] hover:bg-[#1b3025] hover:text-[#c4eed3]"}`} type="button" onClick={() => void selectLogService(selectedProject.id, service.id)}>Logs</button>
                           </div>
                           {service.port && <span className={`font-mono text-[11px] ${portClasses[serviceRuntime.portStatus ?? "unknown"]}`}>:{service.port} <small className="mt-1 block text-right text-[8px] uppercase text-[#6f8c7a]">{portStatusLabel(serviceRuntime.portStatus)}</small></span>}
@@ -578,10 +759,47 @@ export function App() {
           </section>
         </div>
 
-        <section className="mt-4 flex items-center gap-[18px] rounded-md border border-[#1d2926] px-3.5 py-[11px] font-mono text-[9px] text-[#67766f]" id="activity">
-          <div className="flex items-center gap-2 text-[#94a59b]"><StatusDot state={connectionState} /><span>{connectionLabel}</span></div>
-          <span className="ml-auto">React UI connected through Tauri IPC</span>
-          <button className={textButtonClass} type="button" onClick={() => { void loadProjects(); void loadRuntime(); }}>Refresh</button>
+        <section className="mt-4 overflow-hidden rounded-md border border-[#1d2926] bg-[#0f1416]" id="activity" aria-labelledby="activity-title">
+          <header className="flex items-center gap-4 border-b border-[#1d2926] px-4 py-3">
+            <div>
+              <p className={eyebrowClass}>Activity</p>
+              <h3 className="mt-1 text-[14px] font-semibold tracking-[-0.03em] text-[#dfe8e2]" id="activity-title">Recent workspace activity</h3>
+            </div>
+            <div className="ml-auto flex items-center gap-2">
+              <select className="min-h-[30px] rounded border border-[#2a3933] bg-[#0d1315] px-2 text-[10px] text-[#aabbb1] outline-none focus:border-[#66957a]" aria-label="Filter activity by project" value={activityProjectFilter} onChange={(event) => setActivityProjectFilter(event.target.value)}>
+                <option value="all">All projects</option>
+                {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+              </select>
+              <button className={textButtonClass} type="button" disabled={activity.length === 0} onClick={() => setActivity([])}>Clear</button>
+            </div>
+          </header>
+
+          {visibleActivity.length === 0 ? (
+            <div className="grid min-h-[120px] place-content-center gap-1.5 px-4 py-7 text-center text-[10px] text-[#68786f]">
+              <p>{activity.length === 0 ? "No activity yet." : "No activity for this project."}</p>
+              <span>Start, stop, build, or pull a project to see events here.</span>
+            </div>
+          ) : (
+            <div className="max-h-[280px] overflow-auto">
+              {visibleActivity.map((entry) => (
+                <article className="grid grid-cols-[18px_72px_minmax(0,1fr)_auto] items-center gap-2.5 border-b border-[#182320] px-4 py-3 last:border-b-0" key={entry.id}>
+                  <span className={`grid h-[18px] w-[18px] place-items-center rounded-full border text-[9px] ${entry.state === "error" ? "border-[#75474a] bg-[#2b1b1e] text-[#d89595]" : entry.state === "working" ? "border-[#806c43] bg-[#2b2518] text-[#d7b574]" : entry.state === "success" ? "border-[#3c6a50] bg-[#193022] text-[#9fe1b5]" : "border-[#3b4c44] bg-[#17211e] text-[#9cb1a5]"}`} aria-hidden="true">{entry.state === "error" ? "!" : entry.state === "working" ? "~" : entry.state === "success" ? "✓" : "·"}</span>
+                  <time className="font-mono text-[9px] text-[#52645b]">{activityTime(entry.timestamp)}</time>
+                  <div className="min-w-0">
+                    <p className="overflow-hidden text-ellipsis whitespace-nowrap text-[10px] text-[#c9d8ce]">{entry.message}</p>
+                    <p className="mt-1 overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[9px] text-[#65786d]">{entry.projectName}{entry.serviceName ? ` / ${entry.serviceName}` : ""}</p>
+                  </div>
+                  <span className={`font-mono text-[8px] tracking-[0.08em] ${entry.state === "error" ? "text-[#c87979]" : entry.state === "working" ? "text-[#d7b574]" : "text-[#72957e]"}`}>{activityKindLabel(entry.kind)}</span>
+                </article>
+              ))}
+            </div>
+          )}
+
+          <footer className="flex items-center gap-[18px] border-t border-[#1d2926] px-4 py-[10px] font-mono text-[9px] text-[#67766f]">
+            <div className="flex items-center gap-2 text-[#94a59b]"><StatusDot state={connectionState} /><span>{connectionLabel}</span></div>
+            <span className="ml-auto">Latest 100 events in this session</span>
+            <button className={textButtonClass} type="button" onClick={() => { void loadProjects(); void loadRuntime(); }}>Refresh</button>
+          </footer>
         </section>
 
         <footer className="mt-6 flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.05em] text-[#4f5d57]">
@@ -631,9 +849,10 @@ export function App() {
                   {form.services.map((service, index) => (
                     <div className="rounded-md border border-[#2a3933] bg-[#0e1516] p-[13px]" key={service.id}>
                       <div className="mb-3 flex items-center justify-between font-mono text-[10px] text-[#a9b9b0]"><span>Service {index + 1}</span><button className="border-0 bg-transparent px-0 py-0.5 text-[11px] text-[#bd7e7e] transition hover:text-[#e3a2a2]" type="button" onClick={() => removeService(index)}>Remove</button></div>
-                      <div className="grid grid-cols-[0.75fr_1.25fr_0.75fr_0.5fr] gap-[9px] max-[900px]:grid-cols-2">
+                      <div className="grid grid-cols-[0.7fr_1.15fr_0.85fr_0.95fr_0.5fr] gap-[9px] max-[900px]:grid-cols-2">
                         <label className="grid gap-[7px] text-[10px] text-[#82918a]"><span className="font-semibold tracking-[0.03em]">Name</span><input className="min-h-[35px] w-full rounded-[5px] border border-[#2a3933] bg-[#0d1315] px-2.5 text-[11px] text-[#dce8df] outline-none transition placeholder:text-[#46554e] focus:border-[#66957a] focus:shadow-[0_0_0_2px_rgba(102,149,122,0.13)]" required value={service.name} placeholder="Frontend" onChange={(event) => updateService(index, { name: event.target.value })} /></label>
                         <label className="grid gap-[7px] text-[10px] text-[#82918a]"><span className="font-semibold tracking-[0.03em]">Command</span><input className="min-h-[35px] w-full rounded-[5px] border border-[#2a3933] bg-[#0d1315] px-2.5 text-[11px] text-[#dce8df] outline-none transition placeholder:text-[#46554e] focus:border-[#66957a] focus:shadow-[0_0_0_2px_rgba(102,149,122,0.13)]" required value={service.command} placeholder="npm run dev" onChange={(event) => updateService(index, { command: event.target.value })} /></label>
+                        <label className="grid gap-[7px] text-[10px] text-[#82918a]"><span className="font-semibold tracking-[0.03em]">Docker build command <small className="text-[9px] font-normal text-[#5d6e65]">optional</small></span><input className="min-h-[35px] w-full rounded-[5px] border border-[#2a3933] bg-[#0d1315] px-2.5 text-[11px] text-[#dce8df] outline-none transition placeholder:text-[#46554e] focus:border-[#66957a] focus:shadow-[0_0_0_2px_rgba(102,149,122,0.13)]" value={service.buildCommand ?? ""} placeholder="docker compose build" onChange={(event) => updateService(index, { buildCommand: event.target.value })} /></label>
                         <label className="grid gap-[7px] text-[10px] text-[#82918a]"><span className="font-semibold tracking-[0.03em]">cwd <small className="text-[9px] font-normal text-[#5d6e65]">optional</small></span><input className="min-h-[35px] w-full rounded-[5px] border border-[#2a3933] bg-[#0d1315] px-2.5 text-[11px] text-[#dce8df] outline-none transition placeholder:text-[#46554e] focus:border-[#66957a] focus:shadow-[0_0_0_2px_rgba(102,149,122,0.13)]" value={service.cwd ?? ""} placeholder="./frontend" onChange={(event) => updateService(index, { cwd: event.target.value })} /></label>
                         <label className="grid gap-[7px] text-[10px] text-[#82918a]"><span className="font-semibold tracking-[0.03em]">Port <small className="text-[9px] font-normal text-[#5d6e65]">optional</small></span><input className="min-h-[35px] w-full rounded-[5px] border border-[#2a3933] bg-[#0d1315] px-2.5 text-[11px] text-[#dce8df] outline-none transition placeholder:text-[#46554e] focus:border-[#66957a] focus:shadow-[0_0_0_2px_rgba(102,149,122,0.13)]" type="number" min="1" max="65535" value={service.port ?? ""} placeholder="3000" onChange={(event) => updateService(index, { port: event.target.value ? Number(event.target.value) : undefined })} /></label>
                       </div>
@@ -646,6 +865,37 @@ export function App() {
               <footer className="mt-[22px] flex justify-end gap-2 border-t border-[#24312d] pt-6">
                 <button className={ghostButtonClass} type="button" onClick={closeModal}>Cancel</button>
                 <button className={primaryButtonClass} type="submit" disabled={isSaving}>{isSaving ? "Saving..." : "Save project"}</button>
+              </footer>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {isPullModalOpen && selectedProject && (
+        <div className="fixed inset-0 z-20 grid place-items-center bg-[rgba(4,7,8,0.75)] p-[30px] backdrop-blur-[4px]" role="presentation" onMouseDown={closePullModal}>
+          <section className="w-full max-w-[480px] rounded-[10px] border border-[#33483e] bg-[#11191a] p-7 shadow-[0_25px_80px_rgba(0,0,0,0.45)]" role="dialog" aria-modal="true" aria-labelledby="pull-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="flex items-start justify-between border-b border-[#24312d] pb-[23px]">
+              <div>
+                <p className={eyebrowClass}>Git operation</p>
+                <h2 className="mt-2 text-[27px] font-semibold leading-[1.1] tracking-[-0.04em] text-[#eef5ef]" id="pull-modal-title">Pull changes</h2>
+                <p className="mt-2 text-[11px] text-[#82918a]">Pull from origin into {selectedProject.name}.</p>
+              </div>
+              <button className="grid h-7 w-7 place-items-center rounded border border-[#304139] bg-[#16211e] text-[#90a097] transition hover:border-[#5b7d69] hover:text-[#e4f0e8]" type="button" aria-label="Close" onClick={closePullModal}>x</button>
+            </header>
+
+            <form onSubmit={(event) => void runPull(event)}>
+              <label className="mt-[23px] grid gap-[7px] text-[10px] text-[#82918a]">
+                <span className="font-semibold tracking-[0.03em]">Branch</span>
+                <select className="min-h-[35px] w-full rounded-[5px] border border-[#2a3933] bg-[#0d1315] px-2.5 text-[11px] text-[#dce8df] outline-none transition focus:border-[#66957a] focus:shadow-[0_0_0_2px_rgba(102,149,122,0.13)]" required value={selectedGitBranch} disabled={isPulling || gitBranches.length === 0} onChange={(event) => setSelectedGitBranch(event.target.value)}>
+                  <option value="" disabled>{gitBranches.length === 0 ? "No local branches found" : "Select a branch"}</option>
+                  {gitBranches.map((branch) => <option key={branch.name} value={branch.name}>{branch.name}{branch.current ? " (current)" : ""}</option>)}
+                </select>
+              </label>
+
+              {pullError && <div className="mt-[18px] rounded-md border border-[#5a3436] bg-[#24181b] px-3 py-2.5 text-[11px] text-[#e3a2a2]" role="alert">{pullError}</div>}
+              <footer className="mt-[22px] flex justify-end gap-2 border-t border-[#24312d] pt-6">
+                <button className={ghostButtonClass} type="button" onClick={closePullModal}>Cancel</button>
+                <button className={primaryButtonClass} type="submit" disabled={isPulling || !selectedGitBranch}>{isPulling ? "Pulling..." : "Pull changes"}</button>
               </footer>
             </form>
           </section>

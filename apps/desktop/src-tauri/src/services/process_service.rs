@@ -1,6 +1,6 @@
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    DevDeckEvent, LogStream, PortStatus, ProjectRuntimeState, RuntimeMode, Service,
+    BuildResult, DevDeckEvent, LogStream, PortStatus, ProjectRuntimeState, RuntimeMode, Service,
     ServiceLogEntry, ServiceLogEvent, ServiceRuntimeState, ServiceStatus, ServiceStatusEvent,
 };
 use crate::services::{docker_service, port_service, project_service};
@@ -126,9 +126,24 @@ pub fn stop_project(
     project_id: &str,
 ) -> AppResult<ProjectRuntimeState> {
     let project = project_service::get_project(state, project_id)?;
-    for service in project.services {
+    let docker_projects = project
+        .services
+        .iter()
+        .filter(|service| docker_service::is_compose_up(&service.command))
+        .map(|service| {
+            resolve_working_directory(&project.path, service.cwd.as_deref())
+                .map(|cwd| (service.command.clone(), cwd))
+        })
+        .collect::<AppResult<Vec<_>>>()?;
+
+    for service in &project.services {
         stop_service(app, state, project_id, &service.id)?;
     }
+
+    for (command, cwd) in docker_projects {
+        docker_service::down(&command, &cwd)?;
+    }
+
     get_project_runtime(state, project_id)
 }
 
@@ -396,6 +411,69 @@ pub fn restart_service(
     start_service(app, state, project_id, service_id)
 }
 
+pub fn build_service(
+    app: &AppHandle,
+    state: &AppState,
+    project_id: &str,
+    service_id: &str,
+) -> AppResult<BuildResult> {
+    let project = project_service::get_project(state, project_id)?;
+    let service = project
+        .services
+        .iter()
+        .find(|service| service.id == service_id)
+        .cloned()
+        .ok_or_else(|| AppError::ServiceNotFound(service_id.into()))?;
+    let cwd = resolve_working_directory(&project.path, service.cwd.as_deref())?;
+    let configured_command = service
+        .build_command
+        .as_deref()
+        .filter(|command| !command.trim().is_empty());
+    let is_docker = docker_service::is_compose_up(&service.command);
+    let command = configured_command.unwrap_or("docker compose build");
+    let display_command = if configured_command.is_none() && is_docker {
+        docker_service::build_description(&service.command).unwrap_or_else(|_| command.into())
+    } else {
+        command.into()
+    };
+    append_log(
+        app,
+        state,
+        project_id,
+        service_id,
+        LogStream::Stdout,
+        format!("> {display_command}\n"),
+    );
+
+    let output = if configured_command.is_none() && is_docker {
+        docker_service::build(&service.command, &cwd)?
+    } else {
+        let child = spawn_process(command, &cwd)?;
+        child
+            .wait_with_output()
+            .map_err(|error| AppError::CommandFailed {
+                command: command.into(),
+                message: error.to_string(),
+            })?
+    };
+    append_command_output(app, state, project_id, service_id, &output);
+    let output_text = command_output_text(&output);
+    if !output.status.success() {
+        return Err(AppError::CommandFailed {
+            command: command.into(),
+            message: if output_text.trim().is_empty() {
+                "Build command failed.".into()
+            } else {
+                output_text.trim().to_string()
+            },
+        });
+    }
+    Ok(BuildResult {
+        success: true,
+        output: output_text,
+    })
+}
+
 fn runtime_state(
     service: &Service,
     status: ServiceStatus,
@@ -520,6 +598,18 @@ fn append_command_output(
         LogStream::Stderr,
         String::from_utf8_lossy(&output.stderr).to_string(),
     );
+}
+
+fn command_output_text(output: &std::process::Output) -> String {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if stderr.trim().is_empty() {
+        stdout.into_owned()
+    } else if stdout.trim().is_empty() {
+        stderr.into_owned()
+    } else {
+        format!("{stdout}{stderr}")
+    }
 }
 
 fn spawn_log_reader<R: Read + Send + 'static>(
