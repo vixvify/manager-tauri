@@ -47,7 +47,7 @@ pub fn build_description(command: &str) -> AppResult<String> {
 }
 
 pub fn stop(command: &str, cwd: &Path) -> AppResult<()> {
-    let output = run_compose(command, cwd, ComposeAction::Down)?;
+    let output = run_compose(command, cwd, ComposeAction::Stop)?;
     if !output.status.success() {
         return Err(command_error(command, &output));
     }
@@ -76,6 +76,15 @@ pub fn stop(command: &str, cwd: &Path) -> AppResult<()> {
         message: "Docker Compose reported success, but the requested container is still running."
             .into(),
     })
+}
+
+pub fn down(command: &str, cwd: &Path) -> AppResult<()> {
+    let output = run_compose(command, cwd, ComposeAction::Down)?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(command_error(command, &output))
+    }
 }
 
 fn run_compose(command: &str, cwd: &Path, action: ComposeAction) -> AppResult<Output> {
@@ -113,9 +122,14 @@ fn run_compose(command: &str, cwd: &Path, action: ComposeAction) -> AppResult<Ou
         }
         ComposeAction::Kill => {
             args.push("kill".into());
+            args.extend(service_names(&tokens[up_index + 1..]));
         }
         ComposeAction::Build => {
             args.push("build".into());
+            args.extend(service_names(&tokens[up_index + 1..]));
+        }
+        ComposeAction::Stop => {
+            args.push("stop".into());
             args.extend(service_names(&tokens[up_index + 1..]));
         }
     }
@@ -238,6 +252,7 @@ enum ComposeAction {
     Down,
     Kill,
     Build,
+    Stop,
 }
 
 #[cfg(test)]
@@ -269,5 +284,14 @@ mod tests {
                 .expect("derive build command"),
             "docker compose --env-file local.env build backend proxy"
         );
+    }
+
+    #[test]
+    fn individual_stop_keeps_other_compose_services_unaddressed() {
+        let tokens = tokenize_command("docker compose up -d database").expect("parse command");
+        assert_eq!(service_names(&tokens[3..]), vec!["database"]);
+
+        let tokens = tokenize_command("docker compose up -d backend proxy").expect("parse command");
+        assert_eq!(service_names(&tokens[3..]), vec!["backend", "proxy"]);
     }
 }

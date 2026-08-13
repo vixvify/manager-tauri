@@ -126,9 +126,24 @@ pub fn stop_project(
     project_id: &str,
 ) -> AppResult<ProjectRuntimeState> {
     let project = project_service::get_project(state, project_id)?;
-    for service in project.services {
+    let docker_projects = project
+        .services
+        .iter()
+        .filter(|service| docker_service::is_compose_up(&service.command))
+        .map(|service| {
+            resolve_working_directory(&project.path, service.cwd.as_deref())
+                .map(|cwd| (service.command.clone(), cwd))
+        })
+        .collect::<AppResult<Vec<_>>>()?;
+
+    for service in &project.services {
         stop_service(app, state, project_id, &service.id)?;
     }
+
+    for (command, cwd) in docker_projects {
+        docker_service::down(&command, &cwd)?;
+    }
+
     get_project_runtime(state, project_id)
 }
 
