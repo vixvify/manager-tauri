@@ -1,5 +1,5 @@
 import express from "express";
-import type { HealthResponse, ProjectInput } from "@devdeck/shared";
+import type { HealthResponse, ProjectInput, ProjectReorderInput } from "@devdeck/shared";
 import { ProcessManager, ProcessOperationError, ServiceNotFoundError } from "./process/process-manager.js";
 import { ProjectNotFoundError, ProjectService, ProjectValidationError } from "./services/project-service.js";
 
@@ -43,6 +43,14 @@ export function createApp(projectService = new ProjectService(), processManager 
     try {
       const project = await projectService.create(request.body as ProjectInput);
       response.status(201).json(project);
+    } catch (error) {
+      sendProjectError(error, response);
+    }
+  });
+
+  app.post("/api/projects/reorder", async (request, response) => {
+    try {
+      response.json(await projectService.reorder(request.body as ProjectReorderInput));
     } catch (error) {
       sendProjectError(error, response);
     }

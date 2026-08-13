@@ -20,6 +20,8 @@ Phase 3 adds backend-owned process controls: start, stop, restart, start all, st
 
 Phase 4 adds realtime service output. The server captures stdout and stderr, keeps the latest 500 entries per service in memory, exposes history at `/api/projects/:projectId/services/:serviceId/logs`, and broadcasts log/status events over `ws://127.0.0.1:4317/ws`.
 
+Phase 5 adds port checks, Windows port-owner messages, Docker Compose detached-service detection, Docker Compose stop handling, and persistent project ordering. Use the up/down controls beside each project to change its order.
+
 ## Development
 
 ```text

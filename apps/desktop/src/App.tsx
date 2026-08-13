@@ -60,6 +60,10 @@ function statusLabel(status: ServiceStatus) {
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
+function portStatusLabel(status: ServiceRuntimeState["portStatus"]) {
+  return status === "listening" ? "listening" : status === "checking" ? "checking" : status === "occupied" ? "occupied" : status === "available" ? "not listening" : "";
+}
+
 export function App() {
   const [connectionState, setConnectionState] = useState<ConnectionState>("checking");
   const [health, setHealth] = useState<HealthResponse | null>(null);
@@ -77,6 +81,7 @@ export function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [processAction, setProcessAction] = useState<string | null>(null);
+  const [reorderingProjectId, setReorderingProjectId] = useState<string | null>(null);
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
   const selectedRuntime = runtime.find((state) => state.projectId === selectedProjectId);
@@ -273,6 +278,31 @@ export function App() {
     }
   }
 
+  async function moveProject(projectId: string, direction: "up" | "down") {
+    const currentIndex = projects.findIndex((project) => project.id === projectId);
+    const nextIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+
+    if (currentIndex < 0 || nextIndex < 0 || nextIndex >= projects.length || reorderingProjectId) {
+      return;
+    }
+
+    const reorderedProjects = [...projects];
+    [reorderedProjects[currentIndex], reorderedProjects[nextIndex]] = [reorderedProjects[nextIndex], reorderedProjects[currentIndex]];
+    setReorderingProjectId(projectId);
+
+    try {
+      const savedProjects = await apiRequest<Project[]>("/api/projects/reorder", {
+        method: "POST",
+        body: JSON.stringify({ projectIds: reorderedProjects.map((project) => project.id) })
+      });
+      setProjects(savedProjects);
+    } catch (error) {
+      setProjectsError(error instanceof Error ? error.message : "Unable to reorder projects.");
+    } finally {
+      setReorderingProjectId(null);
+    }
+  }
+
   function getServiceRuntime(serviceId: string): ServiceRuntimeState {
     return selectedRuntime?.services[serviceId] ?? { serviceId, status: "stopped" };
   }
@@ -399,9 +429,15 @@ export function App() {
                   >
                     <div className="project-row__topline">
                       <h4>{project.name}</h4>
-                      <span className={`runtime-badge runtime-badge--${runtime.find((state) => state.projectId === project.id)?.status ?? "stopped"}`}>
-                        {statusLabel(runtime.find((state) => state.projectId === project.id)?.status ?? "stopped")}
-                      </span>
+                      <div className="project-row__topline-right">
+                        <span className={`runtime-badge runtime-badge--${runtime.find((state) => state.projectId === project.id)?.status ?? "stopped"}`}>
+                          {statusLabel(runtime.find((state) => state.projectId === project.id)?.status ?? "stopped")}
+                        </span>
+                        <div className="project-reorder-controls" onClick={(event) => event.stopPropagation()}>
+                          <button className="reorder-button" type="button" aria-label={`Move ${project.name} up`} disabled={projects.indexOf(project) === 0 || reorderingProjectId !== null} onClick={() => void moveProject(project.id, "up")}>↑</button>
+                          <button className="reorder-button" type="button" aria-label={`Move ${project.name} down`} disabled={projects.indexOf(project) === projects.length - 1 || reorderingProjectId !== null} onClick={() => void moveProject(project.id, "down")}>↓</button>
+                        </div>
+                      </div>
                     </div>
                     <p className="project-row__path" title={project.path}>{project.path}</p>
                     <div className="project-row__meta">
@@ -484,7 +520,7 @@ export function App() {
                             <button className="service-action" type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "restart")}>Restart</button>
                             <button className={`service-action ${selectedLogServiceId === service.id ? "service-action--active" : ""}`} type="button" onClick={() => void selectLogService(selectedProject.id, service.id)}>Logs</button>
                           </div>
-                          {service.port && <span className="service-port">:{service.port}</span>}
+                          {service.port && <span className={`service-port service-port--${serviceRuntime.portStatus ?? "unknown"}`}>:{service.port} <small>{portStatusLabel(serviceRuntime.portStatus)}</small></span>}
                         </article>
                       );
                     })}

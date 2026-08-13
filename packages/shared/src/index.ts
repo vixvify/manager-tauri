@@ -28,11 +28,16 @@ export interface ProjectInput {
 }
 
 export type ServiceStatus = "stopped" | "starting" | "running" | "stopping" | "error";
+export type RuntimeMode = "process" | "docker";
+export type PortStatus = "unknown" | "checking" | "listening" | "available" | "occupied";
 
 export interface ServiceRuntimeState {
   serviceId: string;
   status: ServiceStatus;
+  mode?: RuntimeMode;
   pid?: number;
+  port?: number;
+  portStatus?: PortStatus;
   error?: string;
 }
 
@@ -40,6 +45,10 @@ export interface ProjectRuntimeState {
   projectId: string;
   status: ServiceStatus;
   services: Record<string, ServiceRuntimeState>;
+}
+
+export interface ProjectReorderInput {
+  projectIds: string[];
 }
 
 export type LogStream = "stdout" | "stderr";

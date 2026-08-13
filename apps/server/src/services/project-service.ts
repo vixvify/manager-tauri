@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import type { Project, ProjectInput, Service, ServiceInput } from "@devdeck/shared";
+import type { Project, ProjectInput, ProjectReorderInput, Service, ServiceInput } from "@devdeck/shared";
 
 export class ProjectNotFoundError extends Error {
   constructor(projectId: string) {
@@ -144,6 +144,24 @@ export class ProjectService {
 
     projects.splice(projectIndex, 1);
     await this.persist();
+  }
+
+  async reorder(input: ProjectReorderInput) {
+    const projects = await this.list();
+
+    if (!Array.isArray(input.projectIds) || input.projectIds.length !== projects.length) {
+      throw new ProjectValidationError("Project reorder must include every registered project exactly once.");
+    }
+
+    const registeredIds = new Set(projects.map((project) => project.id));
+    const requestedIds = new Set(input.projectIds);
+    if (requestedIds.size !== input.projectIds.length || input.projectIds.some((projectId) => !registeredIds.has(projectId))) {
+      throw new ProjectValidationError("Project reorder contains an unknown or duplicate project.");
+    }
+
+    this.projects = input.projectIds.map((projectId) => projects.find((project) => project.id === projectId)!);
+    await this.persist();
+    return this.projects;
   }
 
   private async ensureLoaded() {

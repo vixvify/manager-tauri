@@ -253,6 +253,12 @@ h3 { margin-top: 7px; color: #dfe8e2; font-size: 16px; }
 .project-row:hover { border-color: #293d35; background: #131e1b; }
 .project-row--selected { border-color: #345343; background: #17241f; }
 .project-row__topline { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.project-row__topline-right { display: flex; align-items: center; gap: 9px; }
+.project-reorder-controls { display: flex; gap: 2px; opacity: 0.4; transition: opacity 150ms ease; }
+.project-row:hover .project-reorder-controls, .project-row--selected .project-reorder-controls { opacity: 1; }
+.reorder-button { display: grid; width: 19px; height: 19px; place-items: center; padding: 0; border: 1px solid #30443a; border-radius: 4px; color: #8caf9c; background: #15201c; font-size: 12px; line-height: 1; }
+.reorder-button:hover:not(:disabled) { border-color: #6b9b7d; color: #d3f2dc; background: #20362a; }
+.reorder-button:disabled { cursor: default; color: #45544d; border-color: #24302b; background: #111719; }
 .project-row h4, .service-row h4 { margin: 0; color: #dce8df; font-size: 13px; font-weight: 600; }
 .registered-badge { color: #80b594; font-family: "Cascadia Code", Consolas, monospace; font-size: 8px; letter-spacing: 0.05em; text-transform: uppercase; }
 .runtime-badge { font-family: "Cascadia Code", Consolas, monospace; font-size: 8px; letter-spacing: 0.04em; text-transform: uppercase; }
@@ -289,6 +295,12 @@ h3 { margin-top: 7px; color: #dfe8e2; font-size: 16px; }
 .service-action:disabled { cursor: default; color: #4d5d54; border-color: #24302b; background: #111719; }
 .service-action--active { border-color: #6c9d7d; color: #d3f2dc; background: #20362a; }
 .service-port { color: #8bd4a8; font-family: "Cascadia Code", Consolas, monospace; font-size: 11px; }
+.service-port small { display: block; margin-top: 4px; color: #6f8c7a; font-size: 8px; text-align: right; text-transform: uppercase; }
+.service-port--available { color: #d1a36f; }
+.service-port--available small { color: #a57d4f; }
+.service-port--checking small { color: #c6a66b; }
+.service-port--occupied { color: #d18484; }
+.service-port--occupied small { color: #c17878; }
 .service-empty { display: grid; justify-items: start; gap: 15px; padding: 28px 18px; border: 1px dashed #2a3b34; border-radius: 7px; color: #718078; font-size: 11px; }
 .service-empty p { margin: 0; }
 .detail-note { display: flex; align-items: center; gap: 9px; margin-top: 28px; padding: 12px 13px; border: 1px solid #26352e; border-radius: 6px; color: #6f8177; background: rgba(24, 37, 31, 0.4); font-size: 10px; }

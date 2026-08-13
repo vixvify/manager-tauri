@@ -3,7 +3,9 @@ import { stat } from "node:fs/promises";
 import { platform } from "node:os";
 import { resolve } from "node:path";
 import type { Project, ProjectRuntimeState, Service, ServiceRuntimeState, ServiceStatus } from "@devdeck/shared";
+import { DockerComposeService } from "../services/docker-compose-service.js";
 import { LogManager } from "../services/log-manager.js";
+import { PortService } from "../services/port-service.js";
 import { ProjectService } from "../services/project-service.js";
 
 type StatusListener = (state: ServiceRuntimeState & { projectId: string }) => void;
@@ -34,7 +36,12 @@ export class ProcessManager {
   private readonly lastStates = new Map<string, ServiceRuntimeState>();
   private readonly statusListeners = new Set<StatusListener>();
 
-  constructor(private readonly projectService: ProjectService, private readonly logManager = new LogManager()) {}
+  constructor(
+    private readonly projectService: ProjectService,
+    private readonly logManager = new LogManager(),
+    private readonly portService = new PortService(),
+    private readonly dockerComposeService = new DockerComposeService()
+  ) {}
 
   getLogManager() {
     return this.logManager;
@@ -61,12 +68,44 @@ export class ProcessManager {
     const workingDirectory = resolve(project.path, service.cwd ?? ".");
     await this.assertDirectory(workingDirectory, service);
 
+    const isDockerService = this.dockerComposeService.isDetachedUp(service.command);
+    if (isDockerService) {
+      try {
+        if (await this.dockerComposeService.isRunning(service.command, workingDirectory)) {
+          const state = this.createRuntimeState(service, "running", "docker");
+          state.portStatus = await this.getPortStatus(service.port);
+          this.setState(projectId, state);
+          return state;
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unable to inspect Docker Compose service.";
+        const state = this.createRuntimeState(service, "error", "docker");
+        state.error = message;
+        this.setState(projectId, state);
+        throw new ProcessOperationError(message);
+      }
+    }
+
+    if (service.port) {
+      const portCheck = await this.portService.check(service.port);
+      if (portCheck.status === "occupied") {
+        const owner = portCheck.processName ? ` by ${portCheck.processName}${portCheck.pid ? ` (PID ${portCheck.pid})` : ""}` : "";
+        const message = `Port ${service.port} is already being used${owner}.`;
+        const state = this.createRuntimeState(service, "error", isDockerService ? "docker" : "process");
+        state.portStatus = "occupied";
+        state.error = message;
+        this.setState(projectId, state);
+        throw new ProcessOperationError(message);
+      }
+    }
+
+    if (isDockerService) {
+      return this.startDockerService(projectId, service, workingDirectory);
+    }
+
     const child = this.spawnCommand(service.command, workingDirectory);
-    const state: ServiceRuntimeState = {
-      serviceId,
-      status: "starting",
-      pid: child.pid
-    };
+    const state = this.createRuntimeState(service, "starting", "process");
+    state.pid = child.pid;
     const managed: ManagedProcess = { child, projectId, serviceId, state };
 
     this.managedProcesses.set(key, managed);
@@ -87,6 +126,7 @@ export class ProcessManager {
 
       state.status = "running";
       this.setState(projectId, state);
+      void this.monitorPort(projectId, service, child);
     });
 
     child.once("error", (error) => {
@@ -110,6 +150,7 @@ export class ProcessManager {
         ? `Process exited with ${signal ? `signal ${signal}` : `code ${code ?? "unknown"}`}.`
         : undefined;
       state.pid = undefined;
+      state.portStatus = service.port ? "available" : undefined;
       this.managedProcesses.delete(key);
       this.setState(projectId, state);
     });
@@ -118,12 +159,33 @@ export class ProcessManager {
   }
 
   async stop(projectId: string, serviceId: string) {
-    await this.findService(projectId, serviceId);
+    const { project, service } = await this.findService(projectId, serviceId);
     const key = this.key(projectId, serviceId);
     const managed = this.managedProcesses.get(key);
 
     if (!managed) {
-      return this.getServiceState(projectId, serviceId);
+      const previousState = this.getServiceState(projectId, serviceId);
+      if (previousState.mode === "docker" && previousState.status !== "stopped") {
+        const workingDirectory = resolve(project.path, service.cwd ?? ".");
+        const state: ServiceRuntimeState = { ...previousState, status: "stopping", error: undefined };
+        this.setState(projectId, state);
+
+        try {
+          await this.dockerComposeService.stop(service.command, workingDirectory);
+          state.status = "stopped";
+          state.portStatus = service.port ? "available" : undefined;
+          this.setState(projectId, state);
+        } catch (error) {
+          state.status = "error";
+          state.error = error instanceof Error ? error.message : "Unable to stop Docker Compose service.";
+          this.setState(projectId, state);
+          throw new ProcessOperationError(state.error);
+        }
+
+        return state;
+      }
+
+      return previousState;
     }
 
     if (managed.state.status === "stopping") {
@@ -203,6 +265,65 @@ export class ProcessManager {
   private getServiceState(projectId: string, serviceId: string) {
     const managed = this.managedProcesses.get(this.key(projectId, serviceId));
     return managed?.state ?? this.lastStates.get(this.key(projectId, serviceId)) ?? { serviceId, status: "stopped" as const };
+  }
+
+  private createRuntimeState(service: Service, status: ServiceStatus, mode: "process" | "docker"): ServiceRuntimeState {
+    return {
+      serviceId: service.id,
+      status,
+      mode,
+      port: service.port,
+      portStatus: service.port ? status === "running" ? "checking" : "unknown" : undefined
+    };
+  }
+
+  private async startDockerService(projectId: string, service: Service, workingDirectory: string) {
+    const state = this.createRuntimeState(service, "starting", "docker");
+    this.setState(projectId, state);
+    this.logManager.append(projectId, service.id, "stdout", `> ${service.command}\n`);
+
+    try {
+      const isRunning = await this.dockerComposeService.start(service.command, workingDirectory);
+      if (!isRunning) {
+        throw new Error("Docker Compose command completed, but no requested container is running.");
+      }
+
+      state.status = "running";
+      state.portStatus = await this.getPortStatus(service.port);
+      this.setState(projectId, state);
+      return state;
+    } catch (error) {
+      state.status = "error";
+      state.error = error instanceof Error ? error.message : "Unable to start Docker Compose service.";
+      this.setState(projectId, state);
+      throw new ProcessOperationError(state.error);
+    }
+  }
+
+  private async monitorPort(projectId: string, service: Service, child: ChildProcess) {
+    if (!service.port) {
+      return;
+    }
+
+    const key = this.key(projectId, service.id);
+    const portResult = await this.portService.waitUntilListening(service.port);
+    const managed = this.managedProcesses.get(key);
+
+    if (!managed || managed.child !== child) {
+      return;
+    }
+
+    managed.state.portStatus = portResult.status === "occupied" ? "listening" : "available";
+    this.setState(projectId, managed.state);
+  }
+
+  private async getPortStatus(port: number | undefined) {
+    if (!port) {
+      return undefined;
+    }
+
+    const result = await this.portService.check(port);
+    return result.status === "occupied" ? "listening" as const : "available" as const;
   }
 
   private setState(projectId: string, state: ServiceRuntimeState) {
