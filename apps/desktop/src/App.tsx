@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { DevDeckEvent, HealthResponse, Project, ProjectInput, ProjectRuntimeState, Service, ServiceLogEntry, ServiceRuntimeState, ServiceStatus } from "@devdeck/shared";
-
-const serverUrl = import.meta.env.VITE_SERVER_URL ?? "http://127.0.0.1:4317";
+import type { Project, ProjectInput, ProjectRuntimeState, Service, ServiceLogEntry, ServiceRuntimeState, ServiceStatus } from "@devdeck/shared";
+import { getTauriErrorMessage } from "./lib/tauri/errors";
+import { subscribeToDevDeckEvents } from "./lib/tauri/events";
+import { getRuntime, getServiceLogs, restartService, startProject, startService, stopProject, stopService } from "./lib/tauri/processes";
+import { addProject, getProjects, removeProject as removeRegisteredProject, reorderProjects, updateProject } from "./lib/tauri/projects";
 
 type ConnectionState = "checking" | "online" | "offline";
 type ModalMode = "create" | "edit" | null;
@@ -26,32 +28,6 @@ function createFormFromProject(project: Project): ProjectForm {
   };
 }
 
-async function apiRequest<T>(path: string, init?: RequestInit) {
-  const response = await fetch(`${serverUrl}${path}`, {
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-    ...init
-  });
-  const rawBody = await response.text();
-  let body: unknown = null;
-
-  if (rawBody) {
-    try {
-      body = JSON.parse(rawBody);
-    } catch {
-      body = rawBody;
-    }
-  }
-
-  if (!response.ok) {
-    const message = typeof body === "object" && body !== null && "error" in body && typeof body.error === "string"
-      ? body.error
-      : `Request failed with status ${response.status}`;
-    throw new Error(message);
-  }
-
-  return body as T;
-}
-
 function StatusDot({ state }: { state: ConnectionState | ServiceStatus }) {
   return <span className={`status-dot status-dot--${state}`} aria-hidden="true" />;
 }
@@ -66,7 +42,6 @@ function portStatusLabel(status: ServiceRuntimeState["portStatus"]) {
 
 export function App() {
   const [connectionState, setConnectionState] = useState<ConnectionState>("checking");
-  const [health, setHealth] = useState<HealthResponse | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [runtime, setRuntime] = useState<ProjectRuntimeState[]>([]);
   const [serviceLogs, setServiceLogs] = useState<Record<string, ServiceLogEntry[]>>({});
@@ -87,31 +62,20 @@ export function App() {
   const selectedRuntime = runtime.find((state) => state.projectId === selectedProjectId);
   const selectedLogService = selectedProject?.services.find((service) => service.id === selectedLogServiceId) ?? null;
 
-  const checkConnection = useCallback(async () => {
-    setConnectionState("checking");
-
-    try {
-      const payload = await apiRequest<HealthResponse>("/api/health");
-      setHealth(payload);
-      setConnectionState("online");
-    } catch {
-      setHealth(null);
-      setConnectionState("offline");
-    }
-  }, []);
-
   const loadProjects = useCallback(async () => {
     setIsProjectsLoading(true);
     setProjectsError(null);
 
     try {
-      const loadedProjects = await apiRequest<Project[]>("/api/projects");
+      const loadedProjects = await getProjects();
       setProjects(loadedProjects);
+      setConnectionState("online");
       setSelectedProjectId((currentId) => currentId && loadedProjects.some((project) => project.id === currentId)
         ? currentId
         : loadedProjects[0]?.id ?? null);
     } catch (error) {
-      setProjectsError(error instanceof Error ? error.message : "Unable to load projects.");
+      setConnectionState("offline");
+      setProjectsError(getTauriErrorMessage(error, "Unable to load projects."));
     } finally {
       setIsProjectsLoading(false);
     }
@@ -119,23 +83,22 @@ export function App() {
 
   const loadRuntime = useCallback(async () => {
     try {
-      setRuntime(await apiRequest<ProjectRuntimeState[]>("/api/runtime"));
+      setRuntime(await getRuntime());
+      setConnectionState("online");
     } catch {
-      // The connection indicator and project load surface the backend error.
+      setConnectionState("offline");
     }
   }, []);
 
   useEffect(() => {
-    void checkConnection();
     void loadProjects();
     void loadRuntime();
     const interval = window.setInterval(() => {
-      void checkConnection();
       void loadRuntime();
     }, 2000);
 
     return () => window.clearInterval(interval);
-  }, [checkConnection, loadProjects, loadRuntime]);
+  }, [loadProjects, loadRuntime]);
 
   useEffect(() => {
     if (!selectedProjectId) {
@@ -143,33 +106,39 @@ export function App() {
       return;
     }
 
-    const websocketUrl = `${serverUrl.replace(/^http/, "ws")}/ws`;
-    const socket = new WebSocket(websocketUrl);
     setLogSocketState("connecting");
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
 
-    socket.addEventListener("open", () => setLogSocketState("connected"));
-    socket.addEventListener("error", () => setLogSocketState("disconnected"));
-    socket.addEventListener("close", () => setLogSocketState("disconnected"));
-    socket.addEventListener("message", (event) => {
-      try {
-        const payload = JSON.parse(event.data) as DevDeckEvent;
-
-        if (payload.type === "service:log" && payload.projectId === selectedProjectId) {
+    void subscribeToDevDeckEvents(
+      (payload) => {
+        if (!disposed && payload.projectId === selectedProjectId) {
+          setLogSocketState("connected");
           setServiceLogs((current) => {
             const entries = [...(current[payload.serviceId] ?? []), payload];
             return { ...current, [payload.serviceId]: entries.slice(-500) };
           });
         }
-
-        if (payload.type === "service:status" && payload.projectId === selectedProjectId) {
+      },
+      (payload) => {
+        if (!disposed && payload.projectId === selectedProjectId) {
           void loadRuntime();
         }
-      } catch {
-        // Ignore malformed messages from a local client or stale server.
       }
-    });
+    ).then((unlisten) => {
+      if (disposed) {
+        unlisten();
+      } else {
+        unsubscribe = unlisten;
+        setLogSocketState("connected");
+      }
+    }).catch(() => setLogSocketState("disconnected"));
 
-    return () => socket.close();
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+      setLogSocketState("disconnected");
+    };
   }, [loadRuntime, selectedProjectId]);
 
   useEffect(() => {
@@ -244,8 +213,8 @@ export function App() {
 
     try {
       const savedProject = modalMode === "edit" && selectedProject
-        ? await apiRequest<Project>(`/api/projects/${selectedProject.id}`, { method: "PUT", body: JSON.stringify(payload) })
-        : await apiRequest<Project>("/api/projects", { method: "POST", body: JSON.stringify(payload) });
+        ? await updateProject(selectedProject.id, payload)
+        : await addProject(payload);
 
       setProjects((current) => modalMode === "edit"
         ? current.map((project) => project.id === savedProject.id ? savedProject : project)
@@ -253,7 +222,7 @@ export function App() {
       setSelectedProjectId(savedProject.id);
       setModalMode(null);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Unable to save project.");
+      setFormError(getTauriErrorMessage(error, "Unable to save project."));
     } finally {
       setIsSaving(false);
     }
@@ -267,12 +236,12 @@ export function App() {
     setDeletingProjectId(project.id);
 
     try {
-      await apiRequest<void>(`/api/projects/${project.id}`, { method: "DELETE" });
+      await removeRegisteredProject(project.id);
       const remainingProjects = projects.filter((candidate) => candidate.id !== project.id);
       setProjects(remainingProjects);
       setSelectedProjectId((currentId) => currentId === project.id ? remainingProjects[0]?.id ?? null : currentId);
     } catch (error) {
-      setProjectsError(error instanceof Error ? error.message : "Unable to remove project.");
+      setProjectsError(getTauriErrorMessage(error, "Unable to remove project."));
     } finally {
       setDeletingProjectId(null);
     }
@@ -291,13 +260,10 @@ export function App() {
     setReorderingProjectId(projectId);
 
     try {
-      const savedProjects = await apiRequest<Project[]>("/api/projects/reorder", {
-        method: "POST",
-        body: JSON.stringify({ projectIds: reorderedProjects.map((project) => project.id) })
-      });
+      const savedProjects = await reorderProjects(reorderedProjects.map((project) => project.id));
       setProjects(savedProjects);
     } catch (error) {
-      setProjectsError(error instanceof Error ? error.message : "Unable to reorder projects.");
+      setProjectsError(getTauriErrorMessage(error, "Unable to reorder projects."));
     } finally {
       setReorderingProjectId(null);
     }
@@ -312,10 +278,16 @@ export function App() {
     setProcessAction(actionKey);
 
     try {
-      await apiRequest<ServiceRuntimeState>(`/api/projects/${projectId}/services/${serviceId}/${action}`, { method: "POST" });
+      if (action === "start") {
+        await startService(projectId, serviceId);
+      } else if (action === "stop") {
+        await stopService(projectId, serviceId);
+      } else {
+        await restartService(projectId, serviceId);
+      }
       await loadRuntime();
     } catch (error) {
-      setProjectsError(error instanceof Error ? error.message : `Unable to ${action} service.`);
+      setProjectsError(getTauriErrorMessage(error, `Unable to ${action} service.`));
       await loadRuntime();
     } finally {
       setProcessAction(null);
@@ -326,10 +298,14 @@ export function App() {
     setProcessAction(`${projectId}:all`);
 
     try {
-      await apiRequest<ProjectRuntimeState>(`/api/projects/${projectId}/${action}`, { method: "POST" });
+      if (action === "start") {
+        await startProject(projectId);
+      } else {
+        await stopProject(projectId);
+      }
       await loadRuntime();
     } catch (error) {
-      setProjectsError(error instanceof Error ? error.message : `Unable to ${action} project.`);
+      setProjectsError(getTauriErrorMessage(error, `Unable to ${action} project.`));
       await loadRuntime();
     } finally {
       setProcessAction(null);
@@ -344,17 +320,17 @@ export function App() {
     }
 
     try {
-      const history = await apiRequest<ServiceLogEntry[]>(`/api/projects/${projectId}/services/${serviceId}/logs`);
+      const history = await getServiceLogs(projectId, serviceId);
       setServiceLogs((current) => ({ ...current, [serviceId]: history }));
     } catch (error) {
-      setProjectsError(error instanceof Error ? error.message : "Unable to load service logs.");
+      setProjectsError(getTauriErrorMessage(error, "Unable to load service logs."));
     }
   }
 
   const connectionLabel = {
-    checking: "Checking backend",
-    online: "Backend connected",
-    offline: "Backend unavailable"
+    checking: "Checking native bridge",
+    online: "Tauri commands ready",
+    offline: "Tauri commands unavailable"
   }[connectionState];
 
   return (
@@ -383,7 +359,7 @@ export function App() {
 
         <div className="sidebar-footer">
           <div className="connection-pill"><StatusDot state={connectionState} /><span>{connectionLabel}</span></div>
-          <p className="version-label">DEVDECK / PHASE 4</p>
+          <p className="version-label">DEVDECK / NATIVE RUST</p>
         </div>
       </aside>
 
@@ -570,8 +546,8 @@ export function App() {
 
         <section className="bridge-status" id="activity">
           <div><StatusDot state={connectionState} /><span>{connectionLabel}</span></div>
-          <span>Last heartbeat {health ? new Date(health.timestamp).toLocaleTimeString() : "-"}</span>
-          <button className="text-button" type="button" onClick={() => void checkConnection()}>Refresh</button>
+          <span>React UI connected through Tauri IPC</span>
+          <button className="text-button" type="button" onClick={() => { void loadProjects(); void loadRuntime(); }}>Refresh</button>
         </section>
 
         <footer className="content-footer">

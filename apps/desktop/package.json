@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 1420",
-    "dev:with-server": "concurrently --names server,vite -c blue,green \"npm --prefix ../server run dev\" \"npm run dev\"",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "tauri:dev": "tauri dev",
@@ -13,6 +12,7 @@
   },
   "dependencies": {
     "@devdeck/shared": "0.1.0",
+    "@tauri-apps/api": "^2.8.0",
     "@tauri-apps/plugin-dialog": "^2.4.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"

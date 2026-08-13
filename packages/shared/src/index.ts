@@ -75,9 +75,3 @@ export interface ServiceStatusEvent {
 }
 
 export type DevDeckEvent = ServiceLogEvent | ServiceStatusEvent;
-
-export interface HealthResponse {
-  status: "ok";
-  service: "devdeck-server";
-  timestamp: string;
-}

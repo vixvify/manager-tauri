@@ -2,43 +2,50 @@
 
 DevDeck is a local-first desktop project manager for running and monitoring development services.
 
-## Phase 1 and Phase 2
+## Architecture
 
-The repository is an npm workspace monorepo containing:
+```text
+React UI
+   ↓ Tauri IPC (`invoke()` and events)
+Rust commands
+   ↓
+OS / Git / Docker / local processes
+```
 
-- `apps/desktop` — React + Vite frontend and Tauri 2 shell
-- `apps/server` — local Express backend
-- `packages/shared` — shared TypeScript contracts
+The application has no local HTTP backend. Project configuration is persisted as JSON at
+`%APPDATA%/DevDeck/projects.json` on Windows. Runtime process state and the latest 500 log
+entries per service are held in Tauri-managed memory.
 
-The Phase 1 development command starts Vite on `http://127.0.0.1:1420` and Express on `http://127.0.0.1:4317`.
-
-Phase 2 adds project registration and local persistence. Projects are stored in `%APPDATA%/DevDeck/projects.json` on Windows. Set `DEVDECK_DATA_DIR` to override the storage directory during development or tests.
-
-The desktop UI supports adding and editing project paths and service definitions. In the Tauri window, `Browse` opens the native folder picker; when running the Vite page directly, the path can be entered manually.
-
-Phase 3 adds backend-owned process controls: start, stop, restart, start all, stop all, runtime status polling, Windows process-tree cleanup, and shutdown cleanup. Removing a project also stops its managed services first.
-
-Phase 4 adds realtime service output. The server captures stdout and stderr, keeps the latest 500 entries per service in memory, exposes history at `/api/projects/:projectId/services/:serviceId/logs`, and broadcasts log/status events over `ws://127.0.0.1:4317/ws`.
-
-Phase 5 adds port checks, Windows port-owner messages, Docker Compose detached-service detection, Docker Compose stop handling, and persistent project ordering. Use the up/down controls beside each project to change its order.
+The Rust layer owns project persistence, process lifecycle, Windows process-tree cleanup, port
+checks, Docker Compose handling, and realtime log/status events. External tools such as Node.js,
+Git, and Docker are used only when a registered service requires them.
 
 ## Development
 
 ```text
 npm install
-npm run dev
-```
-
-To run the Tauri desktop window with both local services:
-
-```text
 npm run tauri:dev
 ```
 
-Checks:
+The Vite development server is started automatically for the Tauri window. No Express server,
+localhost API port, or second terminal is required.
+
+## Checks
 
 ```text
 npm run typecheck
 npm run lint
 npm run build
+cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml
+cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets --all-features -- -D warnings
 ```
+
+## Production
+
+```text
+npm run tauri:build
+```
+
+The resulting desktop application contains the React UI and Rust command layer. It does not
+require Node.js or an Express process at runtime; only intentionally managed developer tools
+need to be installed on the machine.
