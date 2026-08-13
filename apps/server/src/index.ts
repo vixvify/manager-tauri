@@ -10,7 +10,7 @@ const port = Number(process.env.DEVDECK_SERVER_PORT ?? 4317);
 const projectService = new ProjectService();
 const logManager = new LogManager();
 const processManager = new ProcessManager(projectService, logManager);
-const app = createApp(projectService, processManager, logManager);
+const app = createApp(projectService, processManager);
 const server = createServer(app);
 const websocketManager = new WebSocketManager(server, processManager, logManager);
 

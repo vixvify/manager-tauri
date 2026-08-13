@@ -18,6 +18,8 @@ The desktop UI supports adding and editing project paths and service definitions
 
 Phase 3 adds backend-owned process controls: start, stop, restart, start all, stop all, runtime status polling, Windows process-tree cleanup, and shutdown cleanup. Removing a project also stops its managed services first.
 
+Phase 4 adds realtime service output. The server captures stdout and stderr, keeps the latest 500 entries per service in memory, exposes history at `/api/projects/:projectId/services/:serviceId/logs`, and broadcasts log/status events over `ws://127.0.0.1:4317/ws`.
+
 ## Development
 
 ```text

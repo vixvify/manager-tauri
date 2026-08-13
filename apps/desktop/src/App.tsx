@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { HealthResponse, Project, ProjectInput, ProjectRuntimeState, Service, ServiceRuntimeState, ServiceStatus } from "@devdeck/shared";
+import type { DevDeckEvent, HealthResponse, Project, ProjectInput, ProjectRuntimeState, Service, ServiceLogEntry, ServiceRuntimeState, ServiceStatus } from "@devdeck/shared";
 
 const serverUrl = import.meta.env.VITE_SERVER_URL ?? "http://127.0.0.1:4317";
 
@@ -8,6 +8,7 @@ type ConnectionState = "checking" | "online" | "offline";
 type ModalMode = "create" | "edit" | null;
 type ProjectForm = Omit<ProjectInput, "services"> & { services: Service[] };
 type ProcessAction = "start" | "stop" | "restart";
+type LogSocketState = "connecting" | "connected" | "disconnected";
 
 function createId() {
   return typeof crypto.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
@@ -64,6 +65,9 @@ export function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [runtime, setRuntime] = useState<ProjectRuntimeState[]>([]);
+  const [serviceLogs, setServiceLogs] = useState<Record<string, ServiceLogEntry[]>>({});
+  const [selectedLogServiceId, setSelectedLogServiceId] = useState<string | null>(null);
+  const [logSocketState, setLogSocketState] = useState<LogSocketState>("disconnected");
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isProjectsLoading, setIsProjectsLoading] = useState(true);
   const [projectsError, setProjectsError] = useState<string | null>(null);
@@ -76,6 +80,7 @@ export function App() {
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? null;
   const selectedRuntime = runtime.find((state) => state.projectId === selectedProjectId);
+  const selectedLogService = selectedProject?.services.find((service) => service.id === selectedLogServiceId) ?? null;
 
   const checkConnection = useCallback(async () => {
     setConnectionState("checking");
@@ -126,6 +131,46 @@ export function App() {
 
     return () => window.clearInterval(interval);
   }, [checkConnection, loadProjects, loadRuntime]);
+
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setLogSocketState("disconnected");
+      return;
+    }
+
+    const websocketUrl = `${serverUrl.replace(/^http/, "ws")}/ws`;
+    const socket = new WebSocket(websocketUrl);
+    setLogSocketState("connecting");
+
+    socket.addEventListener("open", () => setLogSocketState("connected"));
+    socket.addEventListener("error", () => setLogSocketState("disconnected"));
+    socket.addEventListener("close", () => setLogSocketState("disconnected"));
+    socket.addEventListener("message", (event) => {
+      try {
+        const payload = JSON.parse(event.data) as DevDeckEvent;
+
+        if (payload.type === "service:log" && payload.projectId === selectedProjectId) {
+          setServiceLogs((current) => {
+            const entries = [...(current[payload.serviceId] ?? []), payload];
+            return { ...current, [payload.serviceId]: entries.slice(-500) };
+          });
+        }
+
+        if (payload.type === "service:status" && payload.projectId === selectedProjectId) {
+          void loadRuntime();
+        }
+      } catch {
+        // Ignore malformed messages from a local client or stale server.
+      }
+    });
+
+    return () => socket.close();
+  }, [loadRuntime, selectedProjectId]);
+
+  useEffect(() => {
+    setSelectedLogServiceId(null);
+    setServiceLogs({});
+  }, [selectedProjectId]);
 
   function openCreateModal() {
     setForm(createEmptyForm());
@@ -261,6 +306,21 @@ export function App() {
     }
   }
 
+  async function selectLogService(projectId: string, serviceId: string) {
+    setSelectedLogServiceId(serviceId);
+
+    if (serviceLogs[serviceId]) {
+      return;
+    }
+
+    try {
+      const history = await apiRequest<ServiceLogEntry[]>(`/api/projects/${projectId}/services/${serviceId}/logs`);
+      setServiceLogs((current) => ({ ...current, [serviceId]: history }));
+    } catch (error) {
+      setProjectsError(error instanceof Error ? error.message : "Unable to load service logs.");
+    }
+  }
+
   const connectionLabel = {
     checking: "Checking backend",
     online: "Backend connected",
@@ -293,7 +353,7 @@ export function App() {
 
         <div className="sidebar-footer">
           <div className="connection-pill"><StatusDot state={connectionState} /><span>{connectionLabel}</span></div>
-          <p className="version-label">DEVDECK / PHASE 2</p>
+          <p className="version-label">DEVDECK / PHASE 4</p>
         </div>
       </aside>
 
@@ -422,6 +482,7 @@ export function App() {
                             <button className="service-action" type="button" disabled={isBusy || canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "start")}>Start</button>
                             <button className="service-action" type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "stop")}>Stop</button>
                             <button className="service-action" type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "restart")}>Restart</button>
+                            <button className={`service-action ${selectedLogServiceId === service.id ? "service-action--active" : ""}`} type="button" onClick={() => void selectLogService(selectedProject.id, service.id)}>Logs</button>
                           </div>
                           {service.port && <span className="service-port">:{service.port}</span>}
                         </article>
@@ -430,9 +491,33 @@ export function App() {
                   </div>
                 )}
 
+                {selectedLogService && (
+                  <section className="log-viewer" aria-label={`${selectedLogService.name} logs`}>
+                    <header className="log-viewer__header">
+                      <div>
+                        <p className="eyebrow">Live output</p>
+                        <h3>{selectedLogService.name}</h3>
+                      </div>
+                      <div className="log-viewer__connection"><StatusDot state={logSocketState === "connected" ? "running" : logSocketState === "connecting" ? "starting" : "stopped"} /><span>{logSocketState}</span></div>
+                    </header>
+                    <div className="log-output">
+                      {(serviceLogs[selectedLogService.id] ?? []).length === 0 ? (
+                        <span className="log-output__empty">No output yet. Start the service to stream its terminal output.</span>
+                      ) : (
+                        serviceLogs[selectedLogService.id].map((entry, index) => (
+                          <div className={`log-line log-line--${entry.stream}`} key={`${entry.timestamp}-${index}`}>
+                            <time>{new Date(entry.timestamp).toLocaleTimeString()}</time>
+                            <span>{entry.message}</span>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </section>
+                )}
+
                 <div className="detail-note">
                   <span className="detail-note__icon" aria-hidden="true">i</span>
-                  <p>Service controls and live logs will be connected in the next phase.</p>
+                  <p>Output is kept in memory and limited to the latest 500 entries per service.</p>
                 </div>
               </>
             ) : (

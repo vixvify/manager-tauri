@@ -1,14 +1,9 @@
 import express from "express";
 import type { HealthResponse, ProjectInput } from "@devdeck/shared";
 import { ProcessManager, ProcessOperationError, ServiceNotFoundError } from "./process/process-manager.js";
-import { LogManager } from "./services/log-manager.js";
 import { ProjectNotFoundError, ProjectService, ProjectValidationError } from "./services/project-service.js";
 
-export function createApp(
-  projectService = new ProjectService(),
-  processManager = new ProcessManager(projectService),
-  _logManager: LogManager = processManager.getLogManager()
-) {
+export function createApp(projectService = new ProjectService(), processManager = new ProcessManager(projectService)) {
   const app = express();
 
   app.use((request, response, next) => {
