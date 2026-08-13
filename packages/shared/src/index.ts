@@ -2,6 +2,7 @@ export interface Service {
   id: string;
   name: string;
   command: string;
+  buildCommand?: string;
   cwd?: string;
   port?: number;
 }
@@ -10,6 +11,7 @@ export interface ServiceInput {
   id?: string;
   name: string;
   command: string;
+  buildCommand?: string;
   cwd?: string;
   port?: number;
 }
@@ -49,6 +51,21 @@ export interface ProjectRuntimeState {
 
 export interface ProjectReorderInput {
   projectIds: string[];
+}
+
+export interface GitBranch {
+  name: string;
+  current: boolean;
+}
+
+export interface GitPullResult {
+  branch: string;
+  output: string;
+}
+
+export interface BuildResult {
+  success: boolean;
+  output: string;
 }
 
 export type LogStream = "stdout" | "stderr";

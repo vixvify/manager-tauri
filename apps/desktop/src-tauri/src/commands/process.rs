@@ -1,5 +1,5 @@
-use crate::error::AppResult;
-use crate::models::{ProjectRuntimeState, ServiceLogEntry, ServiceRuntimeState};
+use crate::error::{AppError, AppResult};
+use crate::models::{BuildResult, ProjectRuntimeState, ServiceLogEntry, ServiceRuntimeState};
 use crate::services::process_service;
 use crate::state::AppState;
 use tauri::{AppHandle, State};
@@ -72,4 +72,22 @@ pub fn restart_service(
     state: State<'_, AppState>,
 ) -> AppResult<ServiceRuntimeState> {
     process_service::restart_service(&app, &state, &project_id, &service_id)
+}
+
+#[tauri::command]
+pub async fn build_service(
+    project_id: String,
+    service_id: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> AppResult<BuildResult> {
+    let state = (*state).clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        process_service::build_service(&app, &state, &project_id, &service_id)
+    })
+    .await
+    .map_err(|error| AppError::CommandFailed {
+        command: "build service".into(),
+        message: error.to_string(),
+    })?
 }

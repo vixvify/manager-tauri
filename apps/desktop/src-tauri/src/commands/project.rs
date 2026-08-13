@@ -65,6 +65,12 @@ fn project_configuration_changed(project: &Project, input: &ProjectInput) -> boo
             .any(|(current, next)| {
                 next.id.as_deref() != Some(current.id.as_str())
                     || current.command != next.command.trim()
+                    || current.build_command.as_deref()
+                        != next
+                            .build_command
+                            .as_deref()
+                            .map(str::trim)
+                            .filter(|value| !value.is_empty())
                     || current.cwd.as_deref()
                         != next
                             .cwd

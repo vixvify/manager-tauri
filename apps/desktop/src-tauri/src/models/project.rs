@@ -7,6 +7,8 @@ pub struct Service {
     pub name: String,
     pub command: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build_command: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub port: Option<u16>,
@@ -19,6 +21,8 @@ pub struct ServiceInput {
     pub id: Option<String>,
     pub name: String,
     pub command: String,
+    #[serde(default)]
+    pub build_command: Option<String>,
     #[serde(default)]
     pub cwd: Option<String>,
     #[serde(default)]
@@ -47,6 +51,27 @@ pub struct ProjectInput {
 #[serde(rename_all = "camelCase")]
 pub struct ProjectReorderInput {
     pub project_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitBranch {
+    pub name: String,
+    pub current: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitPullResult {
+    pub branch: String,
+    pub output: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildResult {
+    pub success: bool,
+    pub output: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

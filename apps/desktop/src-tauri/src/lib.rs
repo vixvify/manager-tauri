@@ -24,6 +24,8 @@ pub fn run() {
             commands::project::update_project,
             commands::project::remove_project,
             commands::project::reorder_projects,
+            commands::git::get_git_branches,
+            commands::git::pull_project,
             commands::process::get_runtime,
             commands::process::get_project_runtime,
             commands::process::get_service_logs,
@@ -32,6 +34,7 @@ pub fn run() {
             commands::process::start_service,
             commands::process::stop_service,
             commands::process::restart_service,
+            commands::process::build_service,
         ])
         .build(tauri::generate_context!())
         .expect("error while running DevDeck")

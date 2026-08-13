@@ -20,6 +20,10 @@ The Rust layer owns project persistence, process lifecycle, Windows process-tree
 checks, Docker Compose handling, and realtime log/status events. External tools such as Node.js,
 Git, and Docker are used only when a registered service requires them.
 
+Project actions also include Git Pull. DevDeck loads the local branches, marks the current branch,
+and runs `git pull --no-edit origin <branch>` through a Rust command. Each service has an optional
+Build command; when it is empty, the Build button runs `npm run build` in that service's cwd.
+
 ## Development
 
 ```text
