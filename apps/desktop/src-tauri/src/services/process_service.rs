@@ -410,23 +410,37 @@ pub fn build_service(
         .cloned()
         .ok_or_else(|| AppError::ServiceNotFound(service_id.into()))?;
     let cwd = resolve_working_directory(&project.path, service.cwd.as_deref())?;
-    let command = service.build_command.as_deref().unwrap_or("npm run build");
+    let configured_command = service
+        .build_command
+        .as_deref()
+        .filter(|command| !command.trim().is_empty());
+    let is_docker = docker_service::is_compose_up(&service.command);
+    let command = configured_command.unwrap_or("docker compose build");
+    let display_command = if configured_command.is_none() && is_docker {
+        docker_service::build_description(&service.command).unwrap_or_else(|_| command.into())
+    } else {
+        command.into()
+    };
     append_log(
         app,
         state,
         project_id,
         service_id,
         LogStream::Stdout,
-        format!("> {command}\n"),
+        format!("> {display_command}\n"),
     );
 
-    let child = spawn_process(command, &cwd)?;
-    let output = child
-        .wait_with_output()
-        .map_err(|error| AppError::CommandFailed {
-            command: command.into(),
-            message: error.to_string(),
-        })?;
+    let output = if configured_command.is_none() && is_docker {
+        docker_service::build(&service.command, &cwd)?
+    } else {
+        let child = spawn_process(command, &cwd)?;
+        child
+            .wait_with_output()
+            .map_err(|error| AppError::CommandFailed {
+                command: command.into(),
+                message: error.to_string(),
+            })?
+    };
     append_command_output(app, state, project_id, service_id, &output);
     let output_text = command_output_text(&output);
     if !output.status.success() {

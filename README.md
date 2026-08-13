@@ -22,7 +22,9 @@ Git, and Docker are used only when a registered service requires them.
 
 Project actions also include Git Pull. DevDeck loads the local branches, marks the current branch,
 and runs `git pull --no-edit origin <branch>` through a Rust command. Each service has an optional
-Build command; when it is empty, the Build button runs `npm run build` in that service's cwd.
+Docker build command; when it is empty, DevDeck derives `docker compose build <service>` from the
+service's Compose start command. Custom commands can also be used for Docker workflows such as
+`docker build`.
 
 ## Development
 
