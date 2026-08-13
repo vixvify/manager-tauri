@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import { platform } from "node:os";
 import { resolve } from "node:path";
 import type { Project, ProjectRuntimeState, Service, ServiceRuntimeState, ServiceStatus } from "@devdeck/shared";
+import { LogManager } from "../services/log-manager.js";
 import { ProjectService } from "../services/project-service.js";
 
 type StatusListener = (state: ServiceRuntimeState & { projectId: string }) => void;
@@ -33,7 +34,11 @@ export class ProcessManager {
   private readonly lastStates = new Map<string, ServiceRuntimeState>();
   private readonly statusListeners = new Set<StatusListener>();
 
-  constructor(private readonly projectService: ProjectService) {}
+  constructor(private readonly projectService: ProjectService, private readonly logManager = new LogManager()) {}
+
+  getLogManager() {
+    return this.logManager;
+  }
 
   onStatusChange(listener: StatusListener) {
     this.statusListeners.add(listener);
@@ -66,6 +71,14 @@ export class ProcessManager {
 
     this.managedProcesses.set(key, managed);
     this.setState(projectId, state);
+    this.logManager.append(projectId, serviceId, "stdout", `> ${service.command}\n`);
+
+    child.stdout?.on("data", (chunk: Buffer | string) => {
+      this.logManager.append(projectId, serviceId, "stdout", chunk.toString());
+    });
+    child.stderr?.on("data", (chunk: Buffer | string) => {
+      this.logManager.append(projectId, serviceId, "stderr", chunk.toString());
+    });
 
     child.once("spawn", () => {
       if (this.managedProcesses.get(key)?.child !== child) {
@@ -148,6 +161,11 @@ export class ProcessManager {
     return this.buildProjectState(project);
   }
 
+  async getLogs(projectId: string, serviceId: string) {
+    await this.findService(projectId, serviceId);
+    return this.logManager.get(projectId, serviceId);
+  }
+
   async getAllStates() {
     const projects = await this.projectService.list();
     return projects.map((project) => this.buildProjectState(project));
@@ -198,15 +216,15 @@ export class ProcessManager {
   private spawnCommand(command: string, workingDirectory: string) {
     if (platform() === "win32") {
       return spawn(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", command], {
-        cwd: workingDirectory,
-        stdio: "ignore",
+      cwd: workingDirectory,
+        stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true
       });
     }
 
     return spawn("/bin/sh", ["-c", command], {
       cwd: workingDirectory,
-      stdio: "ignore"
+      stdio: ["ignore", "pipe", "pipe"]
     });
   }
 

@@ -42,6 +42,31 @@ export interface ProjectRuntimeState {
   services: Record<string, ServiceRuntimeState>;
 }
 
+export type LogStream = "stdout" | "stderr";
+
+export interface ServiceLogEntry {
+  timestamp: string;
+  stream: LogStream;
+  message: string;
+}
+
+export interface ServiceLogEvent extends ServiceLogEntry {
+  type: "service:log";
+  projectId: string;
+  serviceId: string;
+}
+
+export interface ServiceStatusEvent {
+  type: "service:status";
+  projectId: string;
+  serviceId: string;
+  status: ServiceStatus;
+  pid?: number;
+  error?: string;
+}
+
+export type DevDeckEvent = ServiceLogEvent | ServiceStatusEvent;
+
 export interface HealthResponse {
   status: "ok";
   service: "devdeck-server";

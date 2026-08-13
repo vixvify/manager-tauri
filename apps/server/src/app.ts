@@ -1,9 +1,14 @@
 import express from "express";
 import type { HealthResponse, ProjectInput } from "@devdeck/shared";
 import { ProcessManager, ProcessOperationError, ServiceNotFoundError } from "./process/process-manager.js";
+import { LogManager } from "./services/log-manager.js";
 import { ProjectNotFoundError, ProjectService, ProjectValidationError } from "./services/project-service.js";
 
-export function createApp(projectService = new ProjectService(), processManager = new ProcessManager(projectService)) {
+export function createApp(
+  projectService = new ProjectService(),
+  processManager = new ProcessManager(projectService),
+  _logManager: LogManager = processManager.getLogManager()
+) {
   const app = express();
 
   app.use((request, response, next) => {
@@ -87,6 +92,14 @@ export function createApp(projectService = new ProjectService(), processManager 
   app.get("/api/projects/:projectId/runtime", async (request, response) => {
     try {
       response.json(await processManager.getProjectState(request.params.projectId));
+    } catch (error) {
+      sendProjectError(error, response);
+    }
+  });
+
+  app.get("/api/projects/:projectId/services/:serviceId/logs", async (request, response) => {
+    try {
+      response.json(await processManager.getLogs(request.params.projectId, request.params.serviceId));
     } catch (error) {
       sendProjectError(error, response);
     }
