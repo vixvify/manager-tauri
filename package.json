@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "concurrently --names server,desktop -c blue,green \"npm run dev --workspace @devdeck/server\" \"npm run dev --workspace @devdeck/desktop\"",
     "build": "npm run build --workspace @devdeck/shared && npm run build --workspace @devdeck/server && npm run build --workspace @devdeck/desktop",
-    "typecheck": "npm run typecheck --workspace @devdeck/shared && npm run typecheck --workspace @devdeck/server && npm run typecheck --workspace @devdeck/desktop",
+    "typecheck": "npm run build --workspace @devdeck/shared && npm run typecheck --workspace @devdeck/shared && npm run typecheck --workspace @devdeck/server && npm run typecheck --workspace @devdeck/desktop",
     "lint": "eslint . --max-warnings=0",
     "check": "npm run typecheck && npm run lint && npm run build",
     "tauri:dev": "npm run tauri:dev --workspace @devdeck/desktop",
