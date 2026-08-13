@@ -561,91 +561,91 @@ export function App() {
                   </section>
                 )}
 
-                <div className="detail-note">
-                  <span className="detail-note__icon" aria-hidden="true">i</span>
+                <div className="mt-7 flex items-center gap-[9px] rounded-md border border-[#26352e] bg-[rgba(24,37,31,0.4)] px-[13px] py-3 text-[10px] text-[#6f8177]">
+                  <span className="grid h-4 w-4 place-items-center rounded-full border border-[#527563] font-serif text-[11px] text-[#8bd4a8]" aria-hidden="true">i</span>
                   <p>Output is kept in memory and limited to the latest 500 entries per service.</p>
                 </div>
               </>
             ) : (
-              <div className="detail-empty">
-                <div className="empty-state__icon" aria-hidden="true">[]</div>
-                <p className="eyebrow">No project selected</p>
-                <h3>Register your first local project.</h3>
-                <p>DevDeck stores only the project path and service configuration.</p>
-                <button className="primary-button" type="button" onClick={openCreateModal}>Add project</button>
+              <div className="grid min-h-[430px] place-content-center justify-items-center gap-2 text-center text-[#718078]">
+                <div className="mb-1.5 grid h-[42px] w-[42px] place-items-center rounded-lg border border-[#2a3c34] bg-[#17241f] text-[19px] text-[#86c6a3]" aria-hidden="true">[]</div>
+                <p className={eyebrowClass}>No project selected</p>
+                <h3 className="mt-0 text-[16px] font-semibold tracking-[-0.04em] text-[#dbe8df]">Register your first local project.</h3>
+                <p className="my-[3px] mb-3 max-w-[310px] text-[11px] leading-[1.6]">DevDeck stores only the project path and service configuration.</p>
+                <button className={primaryButtonClass} type="button" onClick={openCreateModal}>Add project</button>
               </div>
             )}
           </section>
         </div>
 
-        <section className="bridge-status" id="activity">
-          <div><StatusDot state={connectionState} /><span>{connectionLabel}</span></div>
-          <span>React UI connected through Tauri IPC</span>
-          <button className="text-button" type="button" onClick={() => { void loadProjects(); void loadRuntime(); }}>Refresh</button>
+        <section className="mt-4 flex items-center gap-[18px] rounded-md border border-[#1d2926] px-3.5 py-[11px] font-mono text-[9px] text-[#67766f]" id="activity">
+          <div className="flex items-center gap-2 text-[#94a59b]"><StatusDot state={connectionState} /><span>{connectionLabel}</span></div>
+          <span className="ml-auto">React UI connected through Tauri IPC</span>
+          <button className={textButtonClass} type="button" onClick={() => { void loadProjects(); void loadRuntime(); }}>Refresh</button>
         </section>
 
-        <footer className="content-footer">
+        <footer className="mt-6 flex items-center justify-between font-mono text-[9px] uppercase tracking-[0.05em] text-[#4f5d57]">
           <span>DevDeck is local-first.</span>
           <span>Nothing leaves this machine.</span>
         </footer>
       </section>
 
       {modalMode && (
-        <div className="modal-backdrop" role="presentation" onMouseDown={closeModal}>
-          <section className="project-modal" role="dialog" aria-modal="true" aria-labelledby="project-modal-title" onMouseDown={(event) => event.stopPropagation()}>
-            <header className="modal-heading">
+        <div className="fixed inset-0 z-10 grid place-items-center bg-[rgba(4,7,8,0.75)] p-[30px] backdrop-blur-[4px]" role="presentation" onMouseDown={closeModal}>
+          <section className="max-h-[min(720px,calc(100vh-60px))] w-full max-w-[720px] overflow-auto rounded-[10px] border border-[#33483e] bg-[#11191a] p-7 shadow-[0_25px_80px_rgba(0,0,0,0.45)]" role="dialog" aria-modal="true" aria-labelledby="project-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="flex items-start justify-between border-b border-[#24312d] pb-[23px]">
               <div>
-                <p className="eyebrow">Project registry</p>
-                <h2 id="project-modal-title">{modalMode === "create" ? "Add project" : "Edit project"}</h2>
+                <p className={eyebrowClass}>Project registry</p>
+                <h2 className="mt-2 text-[27px] font-semibold leading-[1.1] tracking-[-0.04em] text-[#eef5ef]" id="project-modal-title">{modalMode === "create" ? "Add project" : "Edit project"}</h2>
               </div>
-              <button className="modal-close" type="button" aria-label="Close" onClick={closeModal}>x</button>
+              <button className="grid h-7 w-7 place-items-center rounded border border-[#304139] bg-[#16211e] text-[#90a097] transition hover:border-[#5b7d69] hover:text-[#e4f0e8]" type="button" aria-label="Close" onClick={closeModal}>x</button>
             </header>
 
             <form onSubmit={(event) => void saveProject(event)}>
-              <div className="form-grid">
-                <label>
-                  <span>Project name</span>
-                  <input autoFocus required value={form.name} placeholder="ACS Portal" onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
+              <div className="grid grid-cols-[0.8fr_1.2fr] gap-3.5 pt-[23px] max-[900px]:grid-cols-1">
+                <label className="grid gap-[7px] text-[10px] text-[#82918a]">
+                  <span className="font-semibold tracking-[0.03em]">Project name</span>
+                  <input className="min-h-[35px] w-full rounded-[5px] border border-[#2a3933] bg-[#0d1315] px-2.5 text-[11px] text-[#dce8df] outline-none transition placeholder:text-[#46554e] focus:border-[#66957a] focus:shadow-[0_0_0_2px_rgba(102,149,122,0.13)]" autoFocus required value={form.name} placeholder="ACS Portal" onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} />
                 </label>
-                <label className="path-field">
-                  <span>Project directory</span>
-                  <div className="path-input-wrap">
-                    <input required value={form.path} placeholder="C:/code/acs/acs-portal" onChange={(event) => setForm((current) => ({ ...current, path: event.target.value }))} />
-                    <button className="browse-button" type="button" onClick={() => void chooseProjectFolder()}>Browse</button>
+                <label className="grid gap-[7px] text-[10px] text-[#82918a]">
+                  <span className="font-semibold tracking-[0.03em]">Project directory</span>
+                  <div className="flex gap-[7px]">
+                    <input className="min-h-[35px] min-w-0 w-full rounded-[5px] border border-[#2a3933] bg-[#0d1315] px-2.5 text-[11px] text-[#dce8df] outline-none transition placeholder:text-[#46554e] focus:border-[#66957a] focus:shadow-[0_0_0_2px_rgba(102,149,122,0.13)]" required value={form.path} placeholder="C:/code/acs/acs-portal" onChange={(event) => setForm((current) => ({ ...current, path: event.target.value }))} />
+                    <button className="shrink-0 rounded-[5px] border border-[#365544] bg-[#17241f] px-2.5 text-[11px] text-[#a8d6b7] transition hover:border-[#6b9b7d] hover:bg-[#1c3027]" type="button" onClick={() => void chooseProjectFolder()}>Browse</button>
                   </div>
                 </label>
               </div>
 
-              <div className="service-editor-heading">
+              <div className="flex items-end justify-between gap-3 py-[25px] pb-[13px]">
                 <div>
-                  <p className="eyebrow">Optional</p>
-                  <h3>Services</h3>
+                  <p className={eyebrowClass}>Optional</p>
+                  <h3 className="mt-[7px] text-[14px] font-semibold tracking-[-0.04em] text-[#dfe8e2]">Services</h3>
                 </div>
-                <button className="text-button" type="button" onClick={addService}>+ Add service</button>
+                <button className={textButtonClass} type="button" onClick={addService}>+ Add service</button>
               </div>
 
               {form.services.length === 0 ? (
-                <div className="service-editor-empty">No services configured. You can add them now or later.</div>
+                <div className="rounded-md border border-dashed border-[#2c3d35] p-3.5 text-[10px] text-[#68786f]">No services configured. You can add them now or later.</div>
               ) : (
-                <div className="service-editor-list">
+                <div className="grid gap-2.5">
                   {form.services.map((service, index) => (
-                    <div className="service-editor-row" key={service.id}>
-                      <div className="service-editor-row__heading"><span>Service {index + 1}</span><button className="remove-service" type="button" onClick={() => removeService(index)}>Remove</button></div>
-                      <div className="service-editor-fields">
-                        <label><span>Name</span><input required value={service.name} placeholder="Frontend" onChange={(event) => updateService(index, { name: event.target.value })} /></label>
-                        <label><span>Command</span><input required value={service.command} placeholder="npm run dev" onChange={(event) => updateService(index, { command: event.target.value })} /></label>
-                        <label><span>cwd <small>optional</small></span><input value={service.cwd ?? ""} placeholder="./frontend" onChange={(event) => updateService(index, { cwd: event.target.value })} /></label>
-                        <label><span>Port <small>optional</small></span><input type="number" min="1" max="65535" value={service.port ?? ""} placeholder="3000" onChange={(event) => updateService(index, { port: event.target.value ? Number(event.target.value) : undefined })} /></label>
+                    <div className="rounded-md border border-[#2a3933] bg-[#0e1516] p-[13px]" key={service.id}>
+                      <div className="mb-3 flex items-center justify-between font-mono text-[10px] text-[#a9b9b0]"><span>Service {index + 1}</span><button className="border-0 bg-transparent px-0 py-0.5 text-[11px] text-[#bd7e7e] transition hover:text-[#e3a2a2]" type="button" onClick={() => removeService(index)}>Remove</button></div>
+                      <div className="grid grid-cols-[0.75fr_1.25fr_0.75fr_0.5fr] gap-[9px] max-[900px]:grid-cols-2">
+                        <label className="grid gap-[7px] text-[10px] text-[#82918a]"><span className="font-semibold tracking-[0.03em]">Name</span><input className="min-h-[35px] w-full rounded-[5px] border border-[#2a3933] bg-[#0d1315] px-2.5 text-[11px] text-[#dce8df] outline-none transition placeholder:text-[#46554e] focus:border-[#66957a] focus:shadow-[0_0_0_2px_rgba(102,149,122,0.13)]" required value={service.name} placeholder="Frontend" onChange={(event) => updateService(index, { name: event.target.value })} /></label>
+                        <label className="grid gap-[7px] text-[10px] text-[#82918a]"><span className="font-semibold tracking-[0.03em]">Command</span><input className="min-h-[35px] w-full rounded-[5px] border border-[#2a3933] bg-[#0d1315] px-2.5 text-[11px] text-[#dce8df] outline-none transition placeholder:text-[#46554e] focus:border-[#66957a] focus:shadow-[0_0_0_2px_rgba(102,149,122,0.13)]" required value={service.command} placeholder="npm run dev" onChange={(event) => updateService(index, { command: event.target.value })} /></label>
+                        <label className="grid gap-[7px] text-[10px] text-[#82918a]"><span className="font-semibold tracking-[0.03em]">cwd <small className="text-[9px] font-normal text-[#5d6e65]">optional</small></span><input className="min-h-[35px] w-full rounded-[5px] border border-[#2a3933] bg-[#0d1315] px-2.5 text-[11px] text-[#dce8df] outline-none transition placeholder:text-[#46554e] focus:border-[#66957a] focus:shadow-[0_0_0_2px_rgba(102,149,122,0.13)]" value={service.cwd ?? ""} placeholder="./frontend" onChange={(event) => updateService(index, { cwd: event.target.value })} /></label>
+                        <label className="grid gap-[7px] text-[10px] text-[#82918a]"><span className="font-semibold tracking-[0.03em]">Port <small className="text-[9px] font-normal text-[#5d6e65]">optional</small></span><input className="min-h-[35px] w-full rounded-[5px] border border-[#2a3933] bg-[#0d1315] px-2.5 text-[11px] text-[#dce8df] outline-none transition placeholder:text-[#46554e] focus:border-[#66957a] focus:shadow-[0_0_0_2px_rgba(102,149,122,0.13)]" type="number" min="1" max="65535" value={service.port ?? ""} placeholder="3000" onChange={(event) => updateService(index, { port: event.target.value ? Number(event.target.value) : undefined })} /></label>
                       </div>
                     </div>
                   ))}
                 </div>
               )}
 
-              {formError && <div className="form-error" role="alert">{formError}</div>}
-              <footer className="modal-footer">
-                <button className="ghost-button" type="button" onClick={closeModal}>Cancel</button>
-                <button className="primary-button" type="submit" disabled={isSaving}>{isSaving ? "Saving..." : "Save project"}</button>
+              {formError && <div className="mt-[18px] rounded-md border border-[#5a3436] bg-[#24181b] px-3 py-2.5 text-[11px] text-[#e3a2a2]" role="alert">{formError}</div>}
+              <footer className="mt-[22px] flex justify-end gap-2 border-t border-[#24312d] pt-6">
+                <button className={ghostButtonClass} type="button" onClick={closeModal}>Cancel</button>
+                <button className={primaryButtonClass} type="submit" disabled={isSaving}>{isSaving ? "Saving..." : "Save project"}</button>
               </footer>
             </form>
           </section>
