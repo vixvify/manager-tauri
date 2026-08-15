@@ -6,6 +6,7 @@ import { subscribeToDevDeckEvents } from "./lib/tauri/events";
 import { getGitBranches, pullProject } from "./lib/tauri/git";
 import { buildService, getRuntime, getServiceLogs, restartService, startProject, startService, stopProject, stopService } from "./lib/tauri/processes";
 import { addProject, getProjects, removeProject as removeRegisteredProject, reorderProjects, updateProject } from "./lib/tauri/projects";
+import { openServiceUrl } from "./lib/tauri/system";
 
 type ConnectionState = "checking" | "online" | "offline";
 type ModalMode = "create" | "edit" | null;
@@ -522,6 +523,18 @@ export function App() {
     }
   }
 
+  async function openServiceInBrowser(service: Service) {
+    if (!service.port) {
+      return;
+    }
+
+    try {
+      await openServiceUrl(service.port);
+    } catch (error) {
+      setProjectsError(getTauriErrorMessage(error, "ไม่สามารถเปิดหน้าเว็บของ service ได้"));
+    }
+  }
+
   async function openPullModal() {
     if (!selectedProject) {
       return;
@@ -761,7 +774,19 @@ export function App() {
                             <button className={secondaryButtonClass} type="button" disabled={isBusy} onClick={() => void runServiceAction(selectedProject.id, service.id, "build")}>{processAction === actionKey && activeProcessAction === "build" ? <LoadingSpinner label="กำลัง build" small /> : "Build"}</button>
                             <button className={`inline-flex min-h-9 items-center justify-center rounded-md border px-3 text-xs transition ${selectedLogServiceId === service.id ? "border-[#5d7897] bg-[#293848] text-[#e1edfb]" : "border-[#343b44] bg-transparent text-[#aeb7c1] hover:border-[#667381] hover:bg-[#20262d]"}`} type="button" onClick={() => void selectLogService(selectedProject.id, service.id)}>Logs</button>
                           </div>
-                          {service.port && <span className={`font-mono text-[11px] ${portClasses[serviceRuntime.portStatus ?? "unknown"]}`}>:{service.port} <small className="mt-1 block text-right text-[8px] uppercase text-[#6f8c7a]">{portStatusLabel(serviceRuntime.portStatus)}</small></span>}
+                          {service.port && <div className="flex min-w-[150px] flex-col items-end gap-1">
+                            <button
+                              className="inline-flex max-w-full items-center gap-1 rounded border border-[#394b60] bg-[#1a2430] px-2 py-1 font-mono text-[10px] text-[#b8d1ee] transition hover:border-[#6683a3] hover:bg-[#243447] disabled:cursor-not-allowed disabled:opacity-45"
+                              type="button"
+                              disabled={serviceRuntime.status !== "running"}
+                              title={serviceRuntime.status === "running" ? "เปิดใน browser" : "Start service ก่อนเปิดหน้าเว็บ"}
+                              onClick={() => void openServiceInBrowser(service)}
+                            >
+                              <span className="overflow-hidden text-ellipsis whitespace-nowrap">http://localhost:{service.port}</span>
+                              <span aria-hidden="true">↗</span>
+                            </button>
+                            <small className={`font-mono text-[8px] uppercase ${portClasses[serviceRuntime.portStatus ?? "unknown"]}`}>{portStatusLabel(serviceRuntime.portStatus)}</small>
+                          </div>}
                         </article>
                       );
                     })}
