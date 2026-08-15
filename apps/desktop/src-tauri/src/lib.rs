@@ -35,6 +35,7 @@ pub fn run() {
             commands::process::stop_service,
             commands::process::restart_service,
             commands::process::build_service,
+            commands::system::open_service_url,
         ])
         .build(tauri::generate_context!())
         .expect("error while running DevDeck")
