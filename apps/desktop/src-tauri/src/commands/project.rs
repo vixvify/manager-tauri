@@ -1,4 +1,4 @@
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::models::{Project, ProjectInput, ProjectReorderInput};
 use crate::services::{process_service, project_service};
 use crate::state::AppState;
@@ -20,27 +20,43 @@ pub fn add_project(input: ProjectInput, state: State<'_, AppState>) -> AppResult
 }
 
 #[tauri::command]
-pub fn update_project(
+pub async fn update_project(
     project_id: String,
     input: ProjectInput,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<Project> {
-    let existing = project_service::get_project(&state, &project_id)?;
-    if project_configuration_changed(&existing, &input) {
-        process_service::stop_project(&app, &state, &project_id)?;
-    }
-    project_service::update_project(&state, &project_id, input)
+    let state = (*state).clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let existing = project_service::get_project(&state, &project_id)?;
+        if project_configuration_changed(&existing, &input) {
+            process_service::stop_project(&app, &state, &project_id)?;
+        }
+        project_service::update_project(&state, &project_id, input)
+    })
+    .await
+    .map_err(|error| AppError::CommandFailed {
+        command: "update project".into(),
+        message: error.to_string(),
+    })?
 }
 
 #[tauri::command]
-pub fn remove_project(
+pub async fn remove_project(
     project_id: String,
     app: AppHandle,
     state: State<'_, AppState>,
 ) -> AppResult<()> {
-    process_service::stop_project(&app, &state, &project_id)?;
-    project_service::remove_project(&state, &project_id)
+    let state = (*state).clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        process_service::stop_project(&app, &state, &project_id)?;
+        project_service::remove_project(&state, &project_id)
+    })
+    .await
+    .map_err(|error| AppError::CommandFailed {
+        command: "remove project".into(),
+        message: error.to_string(),
+    })?
 }
 
 #[tauri::command]
