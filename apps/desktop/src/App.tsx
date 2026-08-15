@@ -101,6 +101,22 @@ function portStatusLabel(status: ServiceRuntimeState["portStatus"]) {
   return status === "listening" ? "listening" : status === "checking" ? "checking" : status === "occupied" ? "occupied" : status === "available" ? "not listening" : "";
 }
 
+function extractLocalUrl(message: string) {
+  const match = message.match(/https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d+/i)
+    ?? message.match(/(?:localhost|127\.0\.0\.1|0\.0\.0\.0):\d+/i);
+  if (!match) {
+    return null;
+  }
+
+  const value = match[0].startsWith("http") ? match[0] : `http://${match[0]}`;
+  return value.replace("127.0.0.1", "localhost").replace("0.0.0.0", "localhost");
+}
+
+function getUrlPort(url: string) {
+  const port = Number(url.match(/:(\d+)/)?.[1]);
+  return Number.isInteger(port) && port > 0 && port <= 65535 ? port : undefined;
+}
+
 function activityKindLabel(kind: ActivityKind) {
   return kind === "status" ? "STATUS" : kind === "project" ? "PROJECT" : kind.toUpperCase();
 }
@@ -122,6 +138,7 @@ export function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [runtime, setRuntime] = useState<ProjectRuntimeState[]>([]);
   const [serviceLogs, setServiceLogs] = useState<Record<string, ServiceLogEntry[]>>({});
+  const [detectedServiceUrls, setDetectedServiceUrls] = useState<Record<string, string>>({});
   const [selectedLogServiceId, setSelectedLogServiceId] = useState<string | null>(null);
   const [logSocketState, setLogSocketState] = useState<LogSocketState>("disconnected");
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -239,6 +256,10 @@ export function App() {
             const entries = [...(current[payload.serviceId] ?? []), payload];
             return { ...current, [payload.serviceId]: entries.slice(-500) };
           });
+          const detectedUrl = extractLocalUrl(payload.message);
+          if (detectedUrl) {
+            setDetectedServiceUrls((current) => ({ ...current, [`${payload.projectId}:${payload.serviceId}`]: detectedUrl }));
+          }
         }
       },
       (payload) => {
@@ -284,6 +305,7 @@ export function App() {
   useEffect(() => {
     setSelectedLogServiceId(null);
     setServiceLogs({});
+    setDetectedServiceUrls({});
   }, [selectedProjectId]);
 
   function openCreateModal() {
@@ -518,18 +540,26 @@ export function App() {
     try {
       const history = await getServiceLogs(projectId, serviceId);
       setServiceLogs((current) => ({ ...current, [serviceId]: history }));
+      const detectedUrl = [...history]
+        .reverse()
+        .map((entry) => extractLocalUrl(entry.message))
+        .find((value): value is string => Boolean(value));
+      if (detectedUrl) {
+        setDetectedServiceUrls((current) => ({ ...current, [`${projectId}:${serviceId}`]: detectedUrl }));
+      }
     } catch (error) {
       setProjectsError(getTauriErrorMessage(error, "ไม่สามารถโหลด log ของ service ได้"));
     }
   }
 
-  async function openServiceInBrowser(service: Service) {
-    if (!service.port) {
+  async function openServiceInBrowser(service: Service, serviceUrl?: string) {
+    const port = service.port ?? (serviceUrl ? getUrlPort(serviceUrl) : undefined);
+    if (!port) {
       return;
     }
 
     try {
-      await openServiceUrl(service.port);
+      await openServiceUrl(port);
     } catch (error) {
       setProjectsError(getTauriErrorMessage(error, "ไม่สามารถเปิดหน้าเว็บของ service ได้"));
     }
@@ -754,6 +784,7 @@ export function App() {
                     {selectedProject.services.map((service) => {
                       const serviceRuntime = getServiceRuntime(service.id);
                       const actionKey = `${selectedProject.id}:${service.id}`;
+                      const serviceUrl = detectedServiceUrls[`${selectedProject.id}:${service.id}`] ?? (service.port ? `http://localhost:${service.port}` : null);
                       const isBusy = processAction !== null || serviceRuntime.status === "starting" || serviceRuntime.status === "stopping";
                       const canStop = serviceRuntime.status === "running" || serviceRuntime.status === "starting" || serviceRuntime.status === "error";
 
@@ -765,18 +796,18 @@ export function App() {
                             <code className="mt-[7px] block overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] text-[#a8c2b0]">{service.command}</code>
                             <span className="mt-1.5 block overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[9px] text-[#607269]">build {service.buildCommand ?? "docker compose build"}</span>
                             {service.cwd && <span className="mt-1.5 inline-block font-mono text-[9px] text-[#607269]">cwd {service.cwd}</span>}
-                            {service.port && <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
                               <span className="text-[#71808e]">URL</span>
-                              <code className="rounded border border-[#344659] bg-[#18212b] px-1.5 py-0.5 font-mono text-[#b8d1ee]">http://localhost:{service.port}</code>
+                              {serviceUrl ? <code className="rounded border border-[#344659] bg-[#18212b] px-1.5 py-0.5 font-mono text-[#b8d1ee]">{serviceUrl}</code> : <span className="text-[#778390]">กำลังค้นหาจาก log หรือเพิ่ม Port ใน Edit</span>}
                               <button
                                 className="border-0 bg-transparent px-0 py-0.5 text-[10px] font-medium text-[#a9c8eb] transition hover:text-[#e0edfc] disabled:cursor-not-allowed disabled:text-[#687482]"
                                 type="button"
-                                disabled={serviceRuntime.status !== "running"}
-                                onClick={() => void openServiceInBrowser(service)}
+                                disabled={serviceRuntime.status !== "running" || !serviceUrl}
+                                onClick={() => void openServiceInBrowser(service, serviceUrl ?? undefined)}
                               >
                                 เปิดใน browser ↗
                               </button>
-                            </div>}
+                            </div>
                             {serviceRuntime.error && <span className="mt-1.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[10px] text-[#e39b9b]">{getTauriErrorMessage(serviceRuntime.error, "เกิดข้อผิดพลาดกับ service นี้")}</span>}
                           </div>
                           <div className="flex flex-wrap justify-end gap-1.5">
