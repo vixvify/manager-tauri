@@ -703,7 +703,7 @@ export function App() {
               <div className="grid gap-0.5 p-2">
                 {projects.map((project) => (
                   <article
-                    className={`rounded-md border px-3.5 py-3.5 transition hover:border-[#46525e] hover:bg-[#1d2329] ${project.id === selectedProjectId ? "border-[#526a84] bg-[#202b38]" : "border-transparent"}`}
+                    className={`cursor-pointer rounded-md border px-3.5 py-3.5 transition hover:border-[#46525e] hover:bg-[#1d2329] ${project.id === selectedProjectId ? "border-[#526a84] bg-[#202b38]" : "border-transparent"}`}
                     key={project.id}
                     onClick={() => setSelectedProjectId(project.id)}
                   >
@@ -831,18 +831,19 @@ export function App() {
                   <section className="mt-4 overflow-hidden rounded-md border border-[#303842] bg-[#0d1115]" aria-label={`${selectedLogService.name} logs`}>
                     <header className="flex items-center justify-between gap-3.5 border-b border-[#27303a] bg-[#13181e] px-[15px] py-[13px]">
                       <div>
-                        <p className={eyebrowClass}>Live output</p>
+                        <p className={eyebrowClass}>Terminal output</p>
                         <h3 className="mt-1.5 text-[13px] font-semibold text-[#dce9df]">{selectedLogService.name}</h3>
                       </div>
                       <div className="flex items-center gap-[7px] font-mono text-[9px] uppercase text-[#778a7e]"><StatusDot state={logSocketState === "connected" ? "running" : logSocketState === "connecting" ? "starting" : "stopped"} /><span>{logSocketState}</span></div>
                     </header>
                     <div className="max-h-[235px] overflow-auto px-3.5 py-3 font-mono text-[10px] leading-[1.65] text-[#aeb8c3]">
                       {(serviceLogs[selectedLogService.id] ?? []).length === 0 ? (
-                        <span className="block px-1 py-[19px] text-[#60736a]">No output yet. Start the service to stream its terminal output.</span>
+                        <span className="block px-1 py-[19px] text-[#60736a]">ยังไม่มี output จาก process นี้ กด Start แล้วลองเปิด Logs อีกครั้ง</span>
                       ) : (
                         serviceLogs[selectedLogService.id].map((entry, index) => (
-                          <div className={`grid grid-cols-[70px_minmax(0,1fr)] gap-2.5 whitespace-pre-wrap break-words ${entry.stream === "stderr" ? "text-[#d6a3a3]" : ""}`} key={`${entry.timestamp}-${index}`}>
+                          <div className={`grid grid-cols-[70px_52px_minmax(0,1fr)] gap-2.5 whitespace-pre-wrap break-words ${entry.stream === "stderr" ? "text-[#d6a3a3]" : ""}`} key={`${entry.timestamp}-${index}`}>
                             <time className={entry.stream === "stderr" ? "text-[#8f6565]" : "text-[#50645a]"}>{new Date(entry.timestamp).toLocaleTimeString()}</time>
+                            <span className={`text-[9px] uppercase ${entry.stream === "stderr" ? "text-[#b87979]" : "text-[#7497bc]"}`}>{entry.stream}</span>
                             <span>{entry.message}</span>
                           </div>
                         ))

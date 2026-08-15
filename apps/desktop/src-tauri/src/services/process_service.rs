@@ -220,14 +220,6 @@ pub fn start_service(
     if is_docker {
         let starting = runtime_state(&service, ServiceStatus::Starting, RuntimeMode::Docker);
         set_runtime_state(app, state, project_id, starting);
-        append_log(
-            app,
-            state,
-            project_id,
-            service_id,
-            LogStream::Stdout,
-            format!("> {}\n", service.command),
-        );
         let output = match docker_service::start(&service.command, &cwd) {
             Ok(output) => output,
             Err(error) => {
@@ -284,14 +276,6 @@ pub fn start_service(
     let mut starting = runtime_state(&service, ServiceStatus::Starting, RuntimeMode::Process);
     starting.pid = Some(pid);
     set_runtime_state(app, state, project_id, starting);
-    append_log(
-        app,
-        state,
-        project_id,
-        service_id,
-        LogStream::Stdout,
-        format!("> {}\n", service.command),
-    );
 
     if let Some(reader) = stdout {
         spawn_log_reader(
@@ -431,20 +415,6 @@ pub fn build_service(
         .filter(|command| !command.trim().is_empty());
     let is_docker = docker_service::is_compose_up(&service.command);
     let command = configured_command.unwrap_or("docker compose build");
-    let display_command = if configured_command.is_none() && is_docker {
-        docker_service::build_description(&service.command).unwrap_or_else(|_| command.into())
-    } else {
-        command.into()
-    };
-    append_log(
-        app,
-        state,
-        project_id,
-        service_id,
-        LogStream::Stdout,
-        format!("> {display_command}\n"),
-    );
-
     let output = if configured_command.is_none() && is_docker {
         docker_service::build(&service.command, &cwd)?
     } else {
