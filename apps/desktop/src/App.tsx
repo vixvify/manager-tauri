@@ -765,6 +765,18 @@ export function App() {
                             <code className="mt-[7px] block overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] text-[#a8c2b0]">{service.command}</code>
                             <span className="mt-1.5 block overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[9px] text-[#607269]">build {service.buildCommand ?? "docker compose build"}</span>
                             {service.cwd && <span className="mt-1.5 inline-block font-mono text-[9px] text-[#607269]">cwd {service.cwd}</span>}
+                            {service.port && <div className="mt-2 flex flex-wrap items-center gap-2 text-[10px]">
+                              <span className="text-[#71808e]">URL</span>
+                              <code className="rounded border border-[#344659] bg-[#18212b] px-1.5 py-0.5 font-mono text-[#b8d1ee]">http://localhost:{service.port}</code>
+                              <button
+                                className="border-0 bg-transparent px-0 py-0.5 text-[10px] font-medium text-[#a9c8eb] transition hover:text-[#e0edfc] disabled:cursor-not-allowed disabled:text-[#687482]"
+                                type="button"
+                                disabled={serviceRuntime.status !== "running"}
+                                onClick={() => void openServiceInBrowser(service)}
+                              >
+                                เปิดใน browser ↗
+                              </button>
+                            </div>}
                             {serviceRuntime.error && <span className="mt-1.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[10px] text-[#e39b9b]">{getTauriErrorMessage(serviceRuntime.error, "เกิดข้อผิดพลาดกับ service นี้")}</span>}
                           </div>
                           <div className="flex flex-wrap justify-end gap-1.5">
@@ -774,18 +786,9 @@ export function App() {
                             <button className={secondaryButtonClass} type="button" disabled={isBusy} onClick={() => void runServiceAction(selectedProject.id, service.id, "build")}>{processAction === actionKey && activeProcessAction === "build" ? <LoadingSpinner label="กำลัง build" small /> : "Build"}</button>
                             <button className={`inline-flex min-h-9 items-center justify-center rounded-md border px-3 text-xs transition ${selectedLogServiceId === service.id ? "border-[#5d7897] bg-[#293848] text-[#e1edfb]" : "border-[#343b44] bg-transparent text-[#aeb7c1] hover:border-[#667381] hover:bg-[#20262d]"}`} type="button" onClick={() => void selectLogService(selectedProject.id, service.id)}>Logs</button>
                           </div>
-                          {service.port && <div className="flex min-w-[150px] flex-col items-end gap-1">
-                            <button
-                              className="inline-flex max-w-full items-center gap-1 rounded border border-[#394b60] bg-[#1a2430] px-2 py-1 font-mono text-[10px] text-[#b8d1ee] transition hover:border-[#6683a3] hover:bg-[#243447] disabled:cursor-not-allowed disabled:opacity-45"
-                              type="button"
-                              disabled={serviceRuntime.status !== "running"}
-                              title={serviceRuntime.status === "running" ? "เปิดใน browser" : "Start service ก่อนเปิดหน้าเว็บ"}
-                              onClick={() => void openServiceInBrowser(service)}
-                            >
-                              <span className="overflow-hidden text-ellipsis whitespace-nowrap">http://localhost:{service.port}</span>
-                              <span aria-hidden="true">↗</span>
-                            </button>
-                            <small className={`font-mono text-[8px] uppercase ${portClasses[serviceRuntime.portStatus ?? "unknown"]}`}>{portStatusLabel(serviceRuntime.portStatus)}</small>
+                          {service.port && <div className="flex flex-col items-end gap-1">
+                            <span className={`font-mono text-[11px] ${portClasses[serviceRuntime.portStatus ?? "unknown"]}`}>:{service.port}</span>
+                            <small className="font-mono text-[8px] uppercase text-[#6f8c7a]">{portStatusLabel(serviceRuntime.portStatus)}</small>
                           </div>}
                         </article>
                       );
