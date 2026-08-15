@@ -43,13 +43,13 @@ function createFormFromProject(project: Project): ProjectForm {
 }
 
 const statusDotClasses: Record<ConnectionState | ServiceStatus, string> = {
-  online: "bg-[#7ee2ae] shadow-[0_0_0_3px_rgba(126,226,174,0.1),0_0_12px_rgba(126,226,174,0.35)]",
-  running: "bg-[#7ee2ae] shadow-[0_0_0_3px_rgba(126,226,174,0.1),0_0_12px_rgba(126,226,174,0.35)]",
+  online: "bg-[#83cda3]",
+  running: "bg-[#83cda3]",
   checking: "bg-[#d7b574]",
-  starting: "bg-[#d7b574] shadow-[0_0_0_3px_rgba(215,181,116,0.1)]",
+  starting: "bg-[#d7b574]",
   offline: "bg-[#c87979]",
-  error: "bg-[#c87979] shadow-[0_0_0_3px_rgba(200,121,121,0.1)]",
-  stopping: "bg-[#c5a46c] shadow-[0_0_0_3px_rgba(197,164,108,0.1)]",
+  error: "bg-[#c87979]",
+  stopping: "bg-[#c5a46c]",
   stopped: "bg-[#687672]"
 };
 
@@ -69,15 +69,27 @@ const portClasses: Record<NonNullable<ServiceRuntimeState["portStatus"]>, string
   occupied: "text-[#d18484]"
 };
 
-const primaryButtonClass = "inline-flex min-h-[35px] items-center justify-center gap-2 rounded-md bg-[#8de1b8] px-[14px] text-[11px] font-semibold text-[#0c1611] shadow-[0_0_18px_rgba(141,225,184,0.08)] transition hover:bg-[#b0f0cd] disabled:cursor-wait disabled:opacity-55";
-const secondaryButtonClass = "inline-flex min-h-[35px] items-center justify-center gap-2 rounded-md border border-[#365544] bg-[#17241f] px-[14px] text-[11px] font-semibold text-[#c9e3d1] transition hover:border-[#639176] hover:bg-[#1c3027] disabled:cursor-wait disabled:opacity-55";
-const ghostButtonClass = "inline-flex min-h-[35px] items-center justify-center gap-2 rounded-md border border-[#2b3733] bg-[#111619] px-3 text-[11px] text-[#a1aea8] transition hover:border-[#527664] hover:bg-[#16221d] hover:text-[#dcebe2] disabled:cursor-wait disabled:opacity-55";
-const dangerButtonClass = "inline-flex min-h-[35px] items-center justify-center gap-2 rounded-md border border-[#4b3032] bg-[#211719] px-[14px] text-[11px] font-semibold text-[#d89595] transition hover:border-[#75474a] hover:bg-[#2b1b1e] hover:text-[#f0b0b0] disabled:cursor-wait disabled:opacity-55";
-const textButtonClass = "border-0 bg-transparent px-0 py-[3px] text-[11px] text-[#8bcaa4] transition hover:text-[#b9efd0]";
-const eyebrowClass = "font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#687672]";
+const primaryButtonClass = "inline-flex min-h-9 items-center justify-center gap-2 rounded-md bg-[#c9dcf7] px-3.5 text-xs font-semibold text-[#17202b] transition hover:bg-[#d7e6fb] disabled:cursor-wait disabled:opacity-50";
+const secondaryButtonClass = "inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-[#41505f] bg-[#252d36] px-3.5 text-xs font-semibold text-[#d6e0eb] transition hover:border-[#657f9b] hover:bg-[#2c3844] disabled:cursor-wait disabled:opacity-50";
+const ghostButtonClass = "inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-[#343b44] bg-transparent px-3 text-xs text-[#b7c0ca] transition hover:border-[#667381] hover:bg-[#20262d] hover:text-[#edf2f7] disabled:cursor-wait disabled:opacity-50";
+const dangerButtonClass = "inline-flex min-h-9 items-center justify-center gap-2 rounded-md border border-[#633d42] bg-transparent px-3.5 text-xs font-semibold text-[#edb0b0] transition hover:border-[#9a5d63] hover:bg-[#382328] disabled:cursor-wait disabled:opacity-50";
+const textButtonClass = "border-0 bg-transparent px-0 py-1 text-xs text-[#a9c6ea] transition hover:text-[#d8e8fb] disabled:cursor-wait disabled:opacity-50";
+const eyebrowClass = "text-[10px] font-semibold uppercase tracking-[0.16em] text-[#73837b]";
 
 function StatusDot({ state }: { state: ConnectionState | ServiceStatus }) {
   return <span className={`inline-block h-[7px] w-[7px] shrink-0 rounded-full ${statusDotClasses[state]}`} aria-hidden="true" />;
+}
+
+function LoadingSpinner({ label = "กำลังโหลด", small = false }: { label?: string; small?: boolean }) {
+  return <span className="inline-flex items-center gap-2" role="status"><span className={`inline-block animate-spin rounded-full border-2 border-current border-t-transparent ${small ? "h-3 w-3" : "h-4 w-4"}`} aria-hidden="true" /><span>{label}</span></span>;
+}
+
+function ErrorBanner({ message, compact = false, onDismiss }: { message: string; compact?: boolean; onDismiss?: () => void }) {
+  return <div className={`flex items-start gap-2.5 rounded-md border border-[#693d42] bg-[#2a1b20] text-[#f0b5b5] ${compact ? "px-3 py-2 text-[10px]" : "px-3.5 py-3 text-[11px]"}`} role="alert">
+    <span className="mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full border border-[#a3656b] text-[10px] font-semibold" aria-hidden="true">!</span>
+    <span className="min-w-0 flex-1">{message}</span>
+    {onDismiss && <button className="-mr-1 -mt-1 grid h-6 w-6 shrink-0 place-items-center rounded text-base leading-none text-[#d99a9e] transition hover:bg-[#42282d] hover:text-[#ffe1e1]" type="button" aria-label="ปิดข้อความผิดพลาด" title="ปิด" onClick={onDismiss}>×</button>}
+  </div>;
 }
 
 function statusLabel(status: ServiceStatus) {
@@ -96,6 +108,10 @@ function processActionLabel(action: ProcessAction) {
   return action.charAt(0).toUpperCase() + action.slice(1);
 }
 
+function processActionLabelThai(action: ProcessAction) {
+  return { start: "เริ่ม", stop: "หยุด", restart: "รีสตาร์ต", build: "build" }[action];
+}
+
 function activityTime(timestamp: string) {
   return new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
@@ -109,6 +125,8 @@ export function App() {
   const [logSocketState, setLogSocketState] = useState<LogSocketState>("disconnected");
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [isProjectsLoading, setIsProjectsLoading] = useState(true);
+  const [isRuntimeLoading, setIsRuntimeLoading] = useState(true);
+  const [runtimeError, setRuntimeError] = useState<string | null>(null);
   const [projectsError, setProjectsError] = useState<string | null>(null);
   const [projectsNotice, setProjectsNotice] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<ModalMode>(null);
@@ -117,15 +135,18 @@ export function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
   const [processAction, setProcessAction] = useState<string | null>(null);
+  const [activeProcessAction, setActiveProcessAction] = useState<ProcessAction | "start-all" | "stop-all" | null>(null);
   const [reorderingProjectId, setReorderingProjectId] = useState<string | null>(null);
   const [isPullModalOpen, setIsPullModalOpen] = useState(false);
   const [gitBranches, setGitBranches] = useState<GitBranch[]>([]);
   const [selectedGitBranch, setSelectedGitBranch] = useState("");
+  const [isLoadingBranches, setIsLoadingBranches] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const [pullError, setPullError] = useState<string | null>(null);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [activityProjectFilter, setActivityProjectFilter] = useState("all");
   const runtimeRequestInFlight = useRef(false);
+  const hasLoadedRuntime = useRef(false);
 
   const recordActivity = useCallback((entry: Omit<ActivityEntry, "id" | "timestamp">) => {
     const savedEntry: ActivityEntry = {
@@ -158,7 +179,7 @@ export function App() {
         : loadedProjects[0]?.id ?? null);
     } catch (error) {
       setConnectionState("offline");
-      setProjectsError(getTauriErrorMessage(error, "Unable to load projects."));
+      setProjectsError(getTauriErrorMessage(error, "ไม่สามารถโหลดรายการโปรเจกต์ได้"));
     } finally {
       setIsProjectsLoading(false);
     }
@@ -168,14 +189,24 @@ export function App() {
     if (runtimeRequestInFlight.current) {
       return;
     }
+    const isInitialLoad = !hasLoadedRuntime.current;
+    if (isInitialLoad) {
+      setIsRuntimeLoading(true);
+    }
     runtimeRequestInFlight.current = true;
     try {
       setRuntime(await getRuntime());
       setConnectionState("online");
-    } catch {
+      setRuntimeError(null);
+      hasLoadedRuntime.current = true;
+    } catch (error) {
       setConnectionState("offline");
+      setRuntimeError(getTauriErrorMessage(error, "ไม่สามารถตรวจสอบสถานะ service ได้"));
     } finally {
       runtimeRequestInFlight.current = false;
+      if (isInitialLoad) {
+        setIsRuntimeLoading(false);
+      }
     }
   }, []);
 
@@ -224,7 +255,9 @@ export function App() {
             serviceName: service?.name ?? payload.serviceId,
             kind: payload.status === "error" ? "error" : "status",
             state: statusState,
-            message: payload.error ?? `Service ${payload.status}`
+            message: payload.error
+              ? getTauriErrorMessage(payload.error, "เกิดข้อผิดพลาดกับ service นี้")
+              : `สถานะ service: ${payload.status}`
           });
         }
         if (!disposed && payload.projectId === selectedProjectId) {
@@ -296,7 +329,7 @@ export function App() {
         setForm((current) => ({ ...current, path: selectedPath }));
       }
     } catch {
-      setFormError("The native folder picker is unavailable. Enter the path manually.");
+      setFormError("ไม่สามารถเปิดตัวเลือกโฟลเดอร์ได้ กรุณากรอก path ด้วยตัวเอง");
     }
   }
 
@@ -336,7 +369,7 @@ export function App() {
       });
       setModalMode(null);
     } catch (error) {
-      setFormError(getTauriErrorMessage(error, "Unable to save project."));
+      setFormError(getTauriErrorMessage(error, "ไม่สามารถบันทึกโปรเจกต์ได้"));
     } finally {
       setIsSaving(false);
     }
@@ -362,7 +395,7 @@ export function App() {
       setProjects(remainingProjects);
       setSelectedProjectId((currentId) => currentId === project.id ? remainingProjects[0]?.id ?? null : currentId);
     } catch (error) {
-      setProjectsError(getTauriErrorMessage(error, "Unable to remove project."));
+      setProjectsError(getTauriErrorMessage(error, "ไม่สามารถลบโปรเจกต์ได้"));
     } finally {
       setDeletingProjectId(null);
     }
@@ -391,7 +424,7 @@ export function App() {
         message: "Reordered project list"
       });
     } catch (error) {
-      setProjectsError(getTauriErrorMessage(error, "Unable to reorder projects."));
+      setProjectsError(getTauriErrorMessage(error, "ไม่สามารถเปลี่ยนลำดับโปรเจกต์ได้"));
     } finally {
       setReorderingProjectId(null);
     }
@@ -404,6 +437,7 @@ export function App() {
   async function runServiceAction(projectId: string, serviceId: string, action: ProcessAction) {
     const actionKey = `${projectId}:${serviceId}`;
     setProcessAction(actionKey);
+    setActiveProcessAction(action);
     setProjectsNotice(null);
     const project = projects.find((candidate) => candidate.id === projectId);
     const serviceName = project?.services.find((service) => service.id === serviceId)?.name ?? "service";
@@ -431,17 +465,19 @@ export function App() {
       updateActivity(activityId, { state: "success", message: `${processActionLabel(action)} completed for ${serviceName}` });
       await loadRuntime();
     } catch (error) {
-      const message = getTauriErrorMessage(error, `Unable to ${action} service.`);
+      const message = getTauriErrorMessage(error, `ไม่สามารถ${processActionLabelThai(action)} service ได้`);
       updateActivity(activityId, { state: "error", message });
       setProjectsError(message);
       await loadRuntime();
     } finally {
       setProcessAction(null);
+      setActiveProcessAction(null);
     }
   }
 
   async function runProjectAction(projectId: string, action: "start" | "stop") {
     setProcessAction(`${projectId}:all`);
+    setActiveProcessAction(action === "start" ? "start-all" : "stop-all");
     setProjectsNotice(null);
     const project = projects.find((candidate) => candidate.id === projectId);
     const activityId = recordActivity({
@@ -461,12 +497,13 @@ export function App() {
       updateActivity(activityId, { state: "success", message: `${processActionLabel(action)} completed for all services` });
       await loadRuntime();
     } catch (error) {
-      const message = getTauriErrorMessage(error, `Unable to ${action} project.`);
+      const message = getTauriErrorMessage(error, `ไม่สามารถ${processActionLabelThai(action)}โปรเจกต์ได้`);
       updateActivity(activityId, { state: "error", message });
       setProjectsError(message);
       await loadRuntime();
     } finally {
       setProcessAction(null);
+      setActiveProcessAction(null);
     }
   }
 
@@ -481,7 +518,7 @@ export function App() {
       const history = await getServiceLogs(projectId, serviceId);
       setServiceLogs((current) => ({ ...current, [serviceId]: history }));
     } catch (error) {
-      setProjectsError(getTauriErrorMessage(error, "Unable to load service logs."));
+      setProjectsError(getTauriErrorMessage(error, "ไม่สามารถโหลด log ของ service ได้"));
     }
   }
 
@@ -493,13 +530,16 @@ export function App() {
     setGitBranches([]);
     setSelectedGitBranch("");
     setIsPullModalOpen(true);
+    setIsLoadingBranches(true);
 
     try {
       const branches = await getGitBranches(selectedProject.id);
       setGitBranches(branches);
       setSelectedGitBranch(branches.find((branch) => branch.current)?.name ?? branches[0]?.name ?? "");
     } catch (error) {
-      setPullError(getTauriErrorMessage(error, "Unable to load Git branches."));
+      setPullError(getTauriErrorMessage(error, "ไม่สามารถโหลด branch ของ Git ได้"));
+    } finally {
+      setIsLoadingBranches(false);
     }
   }
 
@@ -532,7 +572,7 @@ export function App() {
       setProjectsNotice(`Pulled origin/${branch} into ${project.name}.`);
       setIsPullModalOpen(false);
     } catch (error) {
-      const message = getTauriErrorMessage(error, "Unable to pull Git changes.");
+      const message = getTauriErrorMessage(error, "ไม่สามารถ Pull การเปลี่ยนแปลงจาก Git ได้");
       updateActivity(activityId, { state: "error", message });
       setPullError(message);
     } finally {
@@ -550,43 +590,43 @@ export function App() {
     : activity.filter((entry) => entry.projectId === activityProjectFilter);
 
   return (
-    <main className="grid min-h-screen grid-cols-[248px_minmax(0,1fr)] bg-[radial-gradient(circle_at_75%_-20%,rgba(55,78,71,0.18),transparent_38%),#0b0d10]">
-      <aside className="flex flex-col border-r border-[#1b2223] bg-[rgba(12,15,17,0.88)] px-[18px] pb-6 pt-7">
-        <div className="flex items-center gap-3 px-2 pb-8 pt-1">
-          <div className="grid h-[30px] w-[30px] grid-cols-3 items-end gap-[3px] rounded-lg border border-[#34483f] bg-[#17241f] p-1.5" aria-hidden="true"><span className="block h-[9px] rounded-[2px_2px_1px_1px] bg-[#8de1b8] opacity-55" /><span className="block h-[14px] rounded-[2px_2px_1px_1px] bg-[#8de1b8]" /><span className="block h-[11px] rounded-[2px_2px_1px_1px] bg-[#8de1b8] opacity-75" /></div>
+    <main className="grid min-h-screen grid-cols-[232px_minmax(0,1fr)] bg-[#101214]">
+      <aside className="flex flex-col border-r border-[#292e34] bg-[#15181c] px-4 pb-5 pt-6">
+        <div className="flex items-center gap-3 border-b border-[#20282a] px-2 pb-6">
+          <div className="grid h-9 w-9 place-items-center rounded-md bg-[#c9dcf7] text-sm font-bold text-[#17202b]" aria-hidden="true">D</div>
           <div>
-            <p className="text-[15px] font-semibold tracking-[-0.01em] text-[#f1f4f0]">DevDeck</p>
-            <p className="mt-0.5 text-[10px] uppercase tracking-[0.04em] text-[#687672]">Local development cockpit</p>
+            <p className="text-sm font-semibold text-[#eef4ef]">DevDeck</p>
+            <p className="mt-1 text-[10px] text-[#718079]">Local workspace</p>
           </div>
         </div>
 
-        <nav className="grid gap-[5px]" aria-label="Primary navigation">
-          <a className="flex min-h-10 items-center gap-2.5 rounded-[7px] border border-[#293c35] bg-[#17231f] px-[11px] text-[13px] text-[#e3ebe6] no-underline" href="#projects">
-            <span className="w-[17px] text-center text-[17px] leading-none text-[#7dcba1]" aria-hidden="true">[]</span>
+        <nav className="mt-6 grid gap-1" aria-label="Primary navigation">
+          <a className="flex min-h-10 items-center gap-3 rounded-md border border-[#3d4c5b] bg-[#222b35] px-3 text-xs font-medium text-[#e3ebf4] no-underline" href="#projects">
+            <span className="grid h-5 w-5 place-items-center rounded bg-[#2f4053] text-[10px] font-bold text-[#c5dbf4]" aria-hidden="true">P</span>
             Projects
             <span className="ml-auto font-mono text-[11px] text-[#61716a]">{projects.length}</span>
           </a>
-          <a className="flex min-h-10 items-center gap-2.5 rounded-[7px] border border-transparent px-[11px] text-[13px] text-[#56615d] no-underline" href="#activity">
-            <span className="w-[17px] text-center text-[17px] leading-none text-[#7dcba1]" aria-hidden="true">o</span>
+          <a className="flex min-h-10 items-center gap-3 rounded-md border border-transparent px-3 text-xs text-[#8e969f] no-underline transition hover:border-[#353d46] hover:bg-[#1d2329] hover:text-[#e2e8ef]" href="#activity">
+            <span className="grid h-5 w-5 place-items-center rounded bg-[#252c34] text-[10px] font-bold text-[#abb6c1]" aria-hidden="true">A</span>
             Activity
             <span className="ml-auto font-mono text-[11px] text-[#61716a]">{activity.length}</span>
           </a>
         </nav>
 
         <div className="mt-auto px-2">
-          <div className="flex items-center gap-2 rounded-md border border-[#202b29] px-2.5 py-[9px] text-[11px] text-[#87958e]"><StatusDot state={connectionState} /><span>{connectionLabel}</span></div>
-          <p className="mt-4 font-mono text-[9px] tracking-[0.11em] text-[#45524d]">DEVDECK / NATIVE RUST</p>
+          <div className="flex items-center gap-2 rounded-md border border-[#30363d] bg-[#1b2025] px-3 py-2.5 text-[11px] text-[#9da5ad]"><StatusDot state={connectionState} /><span>{connectionLabel}</span></div>
+          <p className="mt-4 text-[10px] text-[#52615c]">Tauri desktop app</p>
         </div>
       </aside>
 
-      <section className="mx-auto w-full max-w-[1180px] px-[52px] pb-7 pt-[42px] max-[1050px]:px-8 max-[900px]:px-6">
-        <header className="mb-[34px] flex items-center justify-between">
+      <section className="mx-auto w-full max-w-[1400px] px-9 pb-8 pt-7 max-[1050px]:px-7 max-[900px]:px-5">
+        <header className="mb-6 flex items-end justify-between border-b border-[#292e34] pb-5">
           <div>
-            <p className={eyebrowClass}>Workspace</p>
-            <h1 className="mt-[7px] text-[clamp(28px,4vw,38px)] font-semibold tracking-[-0.04em] text-[#f2f4f1]">Projects</h1>
+            <p className="text-xs font-medium text-[#84928b]">Workspace</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-[-0.035em] text-[#edf4ef]">Projects</h1>
           </div>
           <div className="flex gap-2">
-            {selectedProject && <button className={ghostButtonClass} type="button" onClick={() => void openPullModal()}>Pull</button>}
+            {selectedProject && <button className={ghostButtonClass} type="button" disabled={isLoadingBranches} onClick={() => void openPullModal()}>{isLoadingBranches ? <LoadingSpinner label="กำลังโหลด" small /> : "Pull"}</button>}
             <button className={primaryButtonClass} type="button" onClick={openCreateModal}>
               <span className="text-lg font-normal leading-none" aria-hidden="true">+</span>
               Add project
@@ -594,24 +634,25 @@ export function App() {
           </div>
         </header>
 
-        {projectsError && <div className="mb-4 rounded-md border border-[#5a3436] bg-[#24181b] px-[13px] py-[11px] text-[11px] text-[#e3a2a2]" role="alert">{projectsError}</div>}
-        {projectsNotice && <div className="mb-4 rounded-md border border-[#2e5b43] bg-[#14261d] px-[13px] py-[11px] text-[11px] text-[#a9e2b9]" role="status">{projectsNotice}</div>}
+        {projectsError && <div className="mb-3"><ErrorBanner message={projectsError} onDismiss={() => setProjectsError(null)} /></div>}
+        {runtimeError && !projectsError && <div className="mb-3"><ErrorBanner message={runtimeError} compact onDismiss={() => setRuntimeError(null)} /></div>}
+        {projectsNotice && <div className="mb-3 flex items-center gap-2 rounded-md border border-[#3d526a] bg-[#1b2633] px-3.5 py-3 text-[11px] text-[#c4d8ef]" role="status"><span className="grid h-4 w-4 place-items-center rounded-full border border-[#6885a5] text-[10px]" aria-hidden="true">✓</span>{projectsNotice}</div>}
 
-        <div className="grid min-h-[488px] grid-cols-[minmax(260px,0.72fr)_minmax(0,1.55fr)] overflow-hidden rounded-[10px] border border-[#202b29] bg-[#0f1416] max-[900px]:grid-cols-[260px_minmax(0,1fr)]" id="projects">
-          <section className="border-r border-[#202b29]" aria-label="Registered projects">
-            <div className="flex items-start justify-between border-b border-[#1c2725] px-5 pb-[18px] pt-[22px]">
+        <div className="grid min-h-[500px] grid-cols-[280px_minmax(0,1fr)] overflow-hidden rounded-md border border-[#2b3138] bg-[#171a1f] max-[900px]:grid-cols-[250px_minmax(0,1fr)]" id="projects">
+          <section className="border-r border-[#273133]" aria-label="Registered projects">
+            <div className="flex items-start justify-between border-b border-[#273133] px-5 pb-4 pt-5">
               <div>
-                <p className={eyebrowClass}>Registered workspace</p>
-                <h3 className="mt-2 text-[15px] font-semibold tracking-[-0.04em] text-[#dfe8e2]">{projects.length === 0 ? "No projects" : `${projects.length} project${projects.length === 1 ? "" : "s"}`}</h3>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-[#74847b]">Registered projects</p>
+                <h3 className="mt-2 text-sm font-semibold text-[#e1ebe4]">{projects.length === 0 ? "No projects" : `${projects.length} project${projects.length === 1 ? "" : "s"}`}</h3>
               </div>
-              <span className="font-mono text-[9px] tracking-[0.12em] text-[#567367]">LOCAL</span>
+              <span className="rounded bg-[#202c2d] px-2 py-1 text-[9px] font-medium text-[#82968b]">LOCAL</span>
             </div>
 
             {isProjectsLoading ? (
-              <div className="grid min-h-[360px] place-items-center p-5 text-center text-[11px] text-[#697770]">Loading projects...</div>
+              <div className="grid min-h-[360px] place-items-center p-5 text-center text-[11px] text-[#788780]"><LoadingSpinner label="กำลังโหลดโปรเจกต์" /></div>
             ) : projects.length === 0 ? (
               <div className="grid min-h-[360px] content-center justify-items-center gap-[11px] p-5 text-center text-[11px] text-[#697770]">
-                <span className="grid h-[34px] w-[34px] place-items-center rounded-[7px] border border-[#2a4035] bg-[#17241f] text-[19px] text-[#8de1b8]" aria-hidden="true">+</span>
+                <span className="grid h-[34px] w-[34px] place-items-center rounded-md border border-[#384b60] bg-[#202b38] text-[19px] text-[#a8c8ed]" aria-hidden="true">+</span>
                 <p>Your project registry is empty.</p>
                 <button className={textButtonClass} type="button" onClick={openCreateModal}>Register a project</button>
               </div>
@@ -619,14 +660,14 @@ export function App() {
               <div className="grid gap-0.5 p-2">
                 {projects.map((project) => (
                   <article
-                    className={`rounded-[7px] border px-3.5 py-3.5 transition hover:border-[#293d35] hover:bg-[#131e1b] ${project.id === selectedProjectId ? "border-[#345343] bg-[#17241f]" : "border-transparent"}`}
+                    className={`rounded-md border px-3.5 py-3.5 transition hover:border-[#46525e] hover:bg-[#1d2329] ${project.id === selectedProjectId ? "border-[#526a84] bg-[#202b38]" : "border-transparent"}`}
                     key={project.id}
                     onClick={() => setSelectedProjectId(project.id)}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <h4 className="m-0 text-[13px] font-semibold text-[#dce8df]">{project.name}</h4>
                       <div className="flex items-center gap-[9px]">
-                        <span className={`font-mono text-[8px] uppercase tracking-[0.04em] ${runtimeBadgeClasses[runtime.find((state) => state.projectId === project.id)?.status ?? "stopped"]}`}>
+                        <span className={`rounded-full px-2 py-0.5 text-[9px] font-medium ${runtimeBadgeClasses[runtime.find((state) => state.projectId === project.id)?.status ?? "stopped"]}`}>
                           {statusLabel(runtime.find((state) => state.projectId === project.id)?.status ?? "stopped")}
                         </span>
                         <div className={`flex gap-0.5 opacity-40 transition hover:opacity-100 ${project.id === selectedProjectId ? "opacity-100" : "group-hover:opacity-100"}`} onClick={(event) => event.stopPropagation()}>
@@ -649,44 +690,46 @@ export function App() {
           <section className="min-w-0 px-[30px] py-7" aria-label="Project details">
             {selectedProject ? (
               <>
-                <header className="flex items-start justify-between gap-5 border-b border-[#1d2826] pb-[25px]">
+                <header className="flex items-start justify-between gap-5 border-b border-[#273133] pb-6">
                   <div>
-                    <p className={eyebrowClass}>Project detail</p>
-                    <h2 className="mt-2 text-[27px] font-semibold leading-[1.1] tracking-[-0.04em] text-[#eef5ef]">{selectedProject.name}</h2>
-                    <code className="mt-2.5 block max-w-[420px] overflow-hidden text-ellipsis whitespace-nowrap text-[10px] text-[#70847a]" title={selectedProject.path}>{selectedProject.path}</code>
-                    <div className="mt-[13px] flex items-center gap-[7px] text-[10px] text-[#8e9e94]"><StatusDot state={selectedRuntime?.status ?? "stopped"} /><span>{statusLabel(selectedRuntime?.status ?? "stopped")}</span></div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-[#74847b]">Project detail</p>
+                    <h2 className="mt-2 text-2xl font-semibold tracking-[-0.035em] text-[#edf4ef]">{selectedProject.name}</h2>
+                    <code className="mt-2.5 block max-w-[520px] overflow-hidden text-ellipsis whitespace-nowrap rounded bg-[#111719] px-2 py-1 text-[10px] text-[#849890]" title={selectedProject.path}>{selectedProject.path}</code>
+                    <div className="mt-3 flex items-center gap-2 text-[11px] text-[#a5b3ac]">{isRuntimeLoading ? <LoadingSpinner label="กำลังตรวจสอบสถานะ" small /> : <><StatusDot state={selectedRuntime?.status ?? "stopped"} /><span>{statusLabel(selectedRuntime?.status ?? "stopped")}</span></>}</div>
                   </div>
-                  <div className="flex gap-[7px]">
+                  <div className="flex flex-wrap justify-end gap-2">
                     <button
                       className={secondaryButtonClass}
                       type="button"
-                      disabled={selectedProject.services.length === 0 || processAction !== null || selectedRuntime?.status === "running" || selectedRuntime?.status === "starting"}
+                      disabled={selectedProject.services.length === 0 || processAction !== null || isRuntimeLoading || selectedRuntime?.status === "running" || selectedRuntime?.status === "starting"}
                       onClick={() => void runProjectAction(selectedProject.id, "start")}
                     >
-                      Start all
+                      {activeProcessAction === "start-all" ? <LoadingSpinner label="กำลังเริ่ม" small /> : "Start all"}
                     </button>
                     <button
                       className={ghostButtonClass}
                       type="button"
-                      disabled={processAction !== null || (!selectedRuntime?.services || !Object.values(selectedRuntime.services).some((service) => service.status !== "stopped"))}
+                      disabled={processAction !== null || isRuntimeLoading || (!selectedRuntime?.services || !Object.values(selectedRuntime.services).some((service) => service.status !== "stopped"))}
                       onClick={() => void runProjectAction(selectedProject.id, "stop")}
                     >
-                      Stop all
+                      {activeProcessAction === "stop-all" ? <LoadingSpinner label="กำลังหยุด" small /> : "Stop all"}
                     </button>
                     <button className={ghostButtonClass} type="button" onClick={() => openEditModal(selectedProject)}>Edit</button>
                     <button className={dangerButtonClass} type="button" disabled={deletingProjectId === selectedProject.id} onClick={() => void removeProject(selectedProject)}>
-                      {deletingProjectId === selectedProject.id ? "Removing..." : "Remove"}
+                      {deletingProjectId === selectedProject.id ? <LoadingSpinner label="กำลังลบ" small /> : "Remove"}
                     </button>
                   </div>
                 </header>
 
-                <div className="flex items-end justify-between gap-4 py-[25px] pb-[15px]">
+                <div className="flex items-end justify-between gap-4 py-6 pb-4">
                   <div>
-                    <p className={eyebrowClass}>Services</p>
-                    <h3 className="mt-[7px] text-[15px] font-semibold tracking-[-0.04em] text-[#dfe8e2]">{selectedProject.services.length === 0 ? "No services yet" : "Registered services"}</h3>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.13em] text-[#74847b]">Services</p>
+                    <h3 className="mt-2 text-sm font-semibold text-[#e1ebe4]">{selectedProject.services.length === 0 ? "No services yet" : "Registered services"}</h3>
                   </div>
                   <button className={textButtonClass} type="button" onClick={() => openEditModal(selectedProject)}>Edit services</button>
                 </div>
+
+                {isRuntimeLoading && <div className="mb-3 rounded-md border border-[#3b4a58] bg-[#1a232d] px-3.5 py-3 text-[11px] text-[#c0cfdd]"><LoadingSpinner label="กำลังตรวจสอบสถานะ service..." small /></div>}
 
                 {selectedProject.services.length === 0 ? (
                   <div className="grid justify-items-start gap-[15px] rounded-[7px] border border-dashed border-[#2a3b34] px-[18px] py-7 text-[11px] text-[#718078]">
@@ -694,29 +737,29 @@ export function App() {
                     <button className={secondaryButtonClass} type="button" onClick={() => openEditModal(selectedProject)}>Add a service</button>
                   </div>
                 ) : (
-                  <div className="grid gap-[7px]">
+                  <div className="grid gap-2">
                     {selectedProject.services.map((service) => {
                       const serviceRuntime = getServiceRuntime(service.id);
                       const actionKey = `${selectedProject.id}:${service.id}`;
-                      const isBusy = processAction === actionKey || serviceRuntime.status === "starting" || serviceRuntime.status === "stopping";
+                      const isBusy = processAction !== null || serviceRuntime.status === "starting" || serviceRuntime.status === "stopping";
                       const canStop = serviceRuntime.status === "running" || serviceRuntime.status === "starting" || serviceRuntime.status === "error";
 
                       return (
-                        <article className="grid min-h-[74px] grid-cols-[76px_minmax(0,1fr)_auto_auto] items-center gap-[15px] rounded-[7px] border border-[#27342f] bg-[#11191a] px-3.5 py-[13px] max-[1100px]:grid-cols-[76px_minmax(0,1fr)_auto]" key={service.id}>
-                          <div className="flex items-center gap-[7px] text-[10px] text-[#8d9c94]"><StatusDot state={serviceRuntime.status} /><span>{statusLabel(serviceRuntime.status)}</span></div>
+                        <article className="grid min-h-[82px] grid-cols-[86px_minmax(0,1fr)_auto_auto] items-center gap-4 rounded-md border border-[#2f373f] bg-[#12161a] px-4 py-3.5 transition hover:border-[#4a5662] max-[1100px]:grid-cols-[86px_minmax(0,1fr)_auto]" key={service.id}>
+                          <div className="flex items-center gap-2 text-[10px] text-[#a3b1a9]"><StatusDot state={serviceRuntime.status} /><span>{statusLabel(serviceRuntime.status)}</span></div>
                           <div className="min-w-0">
                             <h4 className="m-0 text-[13px] font-semibold text-[#dce8df]">{service.name}</h4>
                             <code className="mt-[7px] block overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[10px] text-[#a8c2b0]">{service.command}</code>
                             <span className="mt-1.5 block overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[9px] text-[#607269]">build {service.buildCommand ?? "docker compose build"}</span>
                             {service.cwd && <span className="mt-1.5 inline-block font-mono text-[9px] text-[#607269]">cwd {service.cwd}</span>}
-                            {serviceRuntime.error && <span className="mt-1.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[9px] text-[#d18484]">{serviceRuntime.error}</span>}
+                            {serviceRuntime.error && <span className="mt-1.5 block overflow-hidden text-ellipsis whitespace-nowrap text-[10px] text-[#e39b9b]">{getTauriErrorMessage(serviceRuntime.error, "เกิดข้อผิดพลาดกับ service นี้")}</span>}
                           </div>
-                          <div className="flex gap-[5px]">
-                            <button className="min-h-[25px] rounded border border-[#2c4036] bg-[#16211d] px-[7px] font-mono text-[9px] text-[#89c5a2] transition hover:border-[#629276] hover:bg-[#1b3025] hover:text-[#c4eed3] disabled:cursor-default disabled:border-[#24302b] disabled:bg-[#111719] disabled:text-[#4d5d54]" type="button" disabled={isBusy || canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "start")}>Start</button>
-                            <button className="min-h-[25px] rounded border border-[#2c4036] bg-[#16211d] px-[7px] font-mono text-[9px] text-[#89c5a2] transition hover:border-[#629276] hover:bg-[#1b3025] hover:text-[#c4eed3] disabled:cursor-default disabled:border-[#24302b] disabled:bg-[#111719] disabled:text-[#4d5d54]" type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "stop")}>Stop</button>
-                            <button className="min-h-[25px] rounded border border-[#2c4036] bg-[#16211d] px-[7px] font-mono text-[9px] text-[#89c5a2] transition hover:border-[#629276] hover:bg-[#1b3025] hover:text-[#c4eed3] disabled:cursor-default disabled:border-[#24302b] disabled:bg-[#111719] disabled:text-[#4d5d54]" type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "restart")}>Restart</button>
-                            <button className="min-h-[25px] rounded border border-[#34483e] bg-[#18231f] px-[7px] font-mono text-[9px] text-[#b6d8c0] transition hover:border-[#6d9b7c] hover:bg-[#20362a] hover:text-[#e0f4e5] disabled:cursor-default disabled:border-[#24302b] disabled:bg-[#111719] disabled:text-[#4d5d54]" type="button" disabled={isBusy} onClick={() => void runServiceAction(selectedProject.id, service.id, "build")}>Build</button>
-                            <button className={`min-h-[25px] rounded border px-[7px] font-mono text-[9px] transition ${selectedLogServiceId === service.id ? "border-[#6c9d7d] bg-[#20362a] text-[#d3f2dc]" : "border-[#2c4036] bg-[#16211d] text-[#89c5a2] hover:border-[#629276] hover:bg-[#1b3025] hover:text-[#c4eed3]"}`} type="button" onClick={() => void selectLogService(selectedProject.id, service.id)}>Logs</button>
+                          <div className="flex flex-wrap justify-end gap-1.5">
+                            <button className={ghostButtonClass} type="button" disabled={isBusy || canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "start")}>{processAction === actionKey && activeProcessAction === "start" ? <LoadingSpinner label="กำลังเริ่ม" small /> : "Start"}</button>
+                            <button className={ghostButtonClass} type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "stop")}>{processAction === actionKey && activeProcessAction === "stop" ? <LoadingSpinner label="กำลังหยุด" small /> : "Stop"}</button>
+                            <button className={ghostButtonClass} type="button" disabled={isBusy || !canStop} onClick={() => void runServiceAction(selectedProject.id, service.id, "restart")}>{processAction === actionKey && activeProcessAction === "restart" ? <LoadingSpinner label="กำลังรีสตาร์ต" small /> : "Restart"}</button>
+                            <button className={secondaryButtonClass} type="button" disabled={isBusy} onClick={() => void runServiceAction(selectedProject.id, service.id, "build")}>{processAction === actionKey && activeProcessAction === "build" ? <LoadingSpinner label="กำลัง build" small /> : "Build"}</button>
+                            <button className={`inline-flex min-h-9 items-center justify-center rounded-md border px-3 text-xs transition ${selectedLogServiceId === service.id ? "border-[#5d7897] bg-[#293848] text-[#e1edfb]" : "border-[#343b44] bg-transparent text-[#aeb7c1] hover:border-[#667381] hover:bg-[#20262d]"}`} type="button" onClick={() => void selectLogService(selectedProject.id, service.id)}>Logs</button>
                           </div>
                           {service.port && <span className={`font-mono text-[11px] ${portClasses[serviceRuntime.portStatus ?? "unknown"]}`}>:{service.port} <small className="mt-1 block text-right text-[8px] uppercase text-[#6f8c7a]">{portStatusLabel(serviceRuntime.portStatus)}</small></span>}
                         </article>
@@ -726,15 +769,15 @@ export function App() {
                 )}
 
                 {selectedLogService && (
-                  <section className="mt-4 overflow-hidden rounded-[7px] border border-[#293a33] bg-[#0a0f10]" aria-label={`${selectedLogService.name} logs`}>
-                    <header className="flex items-center justify-between gap-3.5 border-b border-[#203029] bg-[#101918] px-[15px] py-[13px]">
+                  <section className="mt-4 overflow-hidden rounded-md border border-[#303842] bg-[#0d1115]" aria-label={`${selectedLogService.name} logs`}>
+                    <header className="flex items-center justify-between gap-3.5 border-b border-[#27303a] bg-[#13181e] px-[15px] py-[13px]">
                       <div>
                         <p className={eyebrowClass}>Live output</p>
                         <h3 className="mt-1.5 text-[13px] font-semibold text-[#dce9df]">{selectedLogService.name}</h3>
                       </div>
                       <div className="flex items-center gap-[7px] font-mono text-[9px] uppercase text-[#778a7e]"><StatusDot state={logSocketState === "connected" ? "running" : logSocketState === "connecting" ? "starting" : "stopped"} /><span>{logSocketState}</span></div>
                     </header>
-                    <div className="max-h-[235px] overflow-auto px-3.5 py-3 font-mono text-[10px] leading-[1.65] text-[#a5b8ab]">
+                    <div className="max-h-[235px] overflow-auto px-3.5 py-3 font-mono text-[10px] leading-[1.65] text-[#aeb8c3]">
                       {(serviceLogs[selectedLogService.id] ?? []).length === 0 ? (
                         <span className="block px-1 py-[19px] text-[#60736a]">No output yet. Start the service to stream its terminal output.</span>
                       ) : (
@@ -749,14 +792,14 @@ export function App() {
                   </section>
                 )}
 
-                <div className="mt-7 flex items-center gap-[9px] rounded-md border border-[#26352e] bg-[rgba(24,37,31,0.4)] px-[13px] py-3 text-[10px] text-[#6f8177]">
-                  <span className="grid h-4 w-4 place-items-center rounded-full border border-[#527563] font-serif text-[11px] text-[#8bd4a8]" aria-hidden="true">i</span>
+                <div className="mt-7 flex items-center gap-[9px] rounded-md border border-[#303842] bg-[#181e25] px-[13px] py-3 text-[10px] text-[#7d8995]">
+                  <span className="grid h-4 w-4 place-items-center rounded-full border border-[#52677e] font-serif text-[11px] text-[#a1bddf]" aria-hidden="true">i</span>
                   <p>Output is kept in memory and limited to the latest 500 entries per service.</p>
                 </div>
               </>
             ) : (
               <div className="grid min-h-[430px] place-content-center justify-items-center gap-2 text-center text-[#718078]">
-                <div className="mb-1.5 grid h-[42px] w-[42px] place-items-center rounded-lg border border-[#2a3c34] bg-[#17241f] text-[19px] text-[#86c6a3]" aria-hidden="true">[]</div>
+                <div className="mb-1.5 grid h-[42px] w-[42px] place-items-center rounded-md border border-[#384758] bg-[#202a35] text-[19px] text-[#9bbce1]" aria-hidden="true">[]</div>
                 <p className={eyebrowClass}>No project selected</p>
                 <h3 className="mt-0 text-[16px] font-semibold tracking-[-0.04em] text-[#dbe8df]">Register your first local project.</h3>
                 <p className="my-[3px] mb-3 max-w-[310px] text-[11px] leading-[1.6]">DevDeck stores only the project path and service configuration.</p>
@@ -766,14 +809,14 @@ export function App() {
           </section>
         </div>
 
-        <section className="mt-4 overflow-hidden rounded-md border border-[#1d2926] bg-[#0f1416]" id="activity" aria-labelledby="activity-title">
-          <header className="flex items-center gap-4 border-b border-[#1d2926] px-4 py-3">
+        <section className="mt-4 overflow-hidden rounded-md border border-[#2b3138] bg-[#13171b]" id="activity" aria-labelledby="activity-title">
+          <header className="flex items-center gap-4 border-b border-[#2b3138] px-4 py-3">
             <div>
               <p className={eyebrowClass}>Activity</p>
               <h3 className="mt-1 text-[14px] font-semibold tracking-[-0.03em] text-[#dfe8e2]" id="activity-title">Recent workspace activity</h3>
             </div>
             <div className="ml-auto flex items-center gap-2">
-              <select className="min-h-[30px] rounded border border-[#2a3933] bg-[#0d1315] px-2 text-[10px] text-[#aabbb1] outline-none focus:border-[#66957a]" aria-label="Filter activity by project" value={activityProjectFilter} onChange={(event) => setActivityProjectFilter(event.target.value)}>
+              <select className="min-h-[30px] rounded border border-[#343b44] bg-[#101419] px-2 text-[10px] text-[#b0bac5] outline-none focus:border-[#607e9e]" aria-label="Filter activity by project" value={activityProjectFilter} onChange={(event) => setActivityProjectFilter(event.target.value)}>
                 <option value="all">All projects</option>
                 {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
               </select>
@@ -789,7 +832,7 @@ export function App() {
           ) : (
             <div className="max-h-[280px] overflow-auto">
               {visibleActivity.map((entry) => (
-                <article className="grid grid-cols-[18px_72px_minmax(0,1fr)_auto] items-center gap-2.5 border-b border-[#182320] px-4 py-3 last:border-b-0" key={entry.id}>
+                <article className="grid grid-cols-[18px_72px_minmax(0,1fr)_auto] items-center gap-2.5 border-b border-[#20262d] px-4 py-3 last:border-b-0" key={entry.id}>
                   <span className={`grid h-[18px] w-[18px] place-items-center rounded-full border text-[9px] ${entry.state === "error" ? "border-[#75474a] bg-[#2b1b1e] text-[#d89595]" : entry.state === "working" ? "border-[#806c43] bg-[#2b2518] text-[#d7b574]" : entry.state === "success" ? "border-[#3c6a50] bg-[#193022] text-[#9fe1b5]" : "border-[#3b4c44] bg-[#17211e] text-[#9cb1a5]"}`} aria-hidden="true">{entry.state === "error" ? "!" : entry.state === "working" ? "~" : entry.state === "success" ? "✓" : "·"}</span>
                   <time className="font-mono text-[9px] text-[#52645b]">{activityTime(entry.timestamp)}</time>
                   <div className="min-w-0">
@@ -802,7 +845,7 @@ export function App() {
             </div>
           )}
 
-          <footer className="flex items-center gap-[18px] border-t border-[#1d2926] px-4 py-[10px] font-mono text-[9px] text-[#67766f]">
+          <footer className="flex items-center gap-[18px] border-t border-[#2b3138] px-4 py-[10px] font-mono text-[9px] text-[#707a85]">
             <div className="flex items-center gap-2 text-[#94a59b]"><StatusDot state={connectionState} /><span>{connectionLabel}</span></div>
             <span className="ml-auto">Latest 100 events in this session</span>
             <button className={textButtonClass} type="button" onClick={() => { void loadProjects(); void loadRuntime(); }}>Refresh</button>
@@ -817,13 +860,13 @@ export function App() {
 
       {modalMode && (
         <div className="fixed inset-0 z-10 grid place-items-center bg-[rgba(4,7,8,0.75)] p-[30px] backdrop-blur-[4px]" role="presentation" onMouseDown={closeModal}>
-          <section className="max-h-[min(720px,calc(100vh-60px))] w-full max-w-[720px] overflow-auto rounded-[10px] border border-[#33483e] bg-[#11191a] p-7 shadow-[0_25px_80px_rgba(0,0,0,0.45)]" role="dialog" aria-modal="true" aria-labelledby="project-modal-title" onMouseDown={(event) => event.stopPropagation()}>
-            <header className="flex items-start justify-between border-b border-[#24312d] pb-[23px]">
+          <section className="max-h-[min(720px,calc(100vh-60px))] w-full max-w-[720px] overflow-auto rounded-md border border-[#3a444f] bg-[#171b20] p-7 shadow-[0_25px_80px_rgba(0,0,0,0.45)]" role="dialog" aria-modal="true" aria-labelledby="project-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="flex items-start justify-between border-b border-[#2b323a] pb-[23px]">
               <div>
                 <p className={eyebrowClass}>Project registry</p>
                 <h2 className="mt-2 text-[27px] font-semibold leading-[1.1] tracking-[-0.04em] text-[#eef5ef]" id="project-modal-title">{modalMode === "create" ? "Add project" : "Edit project"}</h2>
               </div>
-              <button className="grid h-7 w-7 place-items-center rounded border border-[#304139] bg-[#16211e] text-[#90a097] transition hover:border-[#5b7d69] hover:text-[#e4f0e8]" type="button" aria-label="Close" onClick={closeModal}>x</button>
+              <button className="grid h-7 w-7 place-items-center rounded border border-[#3b4652] bg-[#20262d] text-[#a6b1bc] transition hover:border-[#6a7e95] hover:text-[#eef4fb]" type="button" aria-label="Close" onClick={closeModal}>×</button>
             </header>
 
             <form onSubmit={(event) => void saveProject(event)}>
@@ -868,10 +911,10 @@ export function App() {
                 </div>
               )}
 
-              {formError && <div className="mt-[18px] rounded-md border border-[#5a3436] bg-[#24181b] px-3 py-2.5 text-[11px] text-[#e3a2a2]" role="alert">{formError}</div>}
+              {formError && <div className="mt-[18px]"><ErrorBanner message={formError} compact onDismiss={() => setFormError(null)} /></div>}
               <footer className="mt-[22px] flex justify-end gap-2 border-t border-[#24312d] pt-6">
                 <button className={ghostButtonClass} type="button" onClick={closeModal}>Cancel</button>
-                <button className={primaryButtonClass} type="submit" disabled={isSaving}>{isSaving ? "Saving..." : "Save project"}</button>
+                <button className={primaryButtonClass} type="submit" disabled={isSaving}>{isSaving ? <LoadingSpinner label="กำลังบันทึก" small /> : "Save project"}</button>
               </footer>
             </form>
           </section>
@@ -880,29 +923,29 @@ export function App() {
 
       {isPullModalOpen && selectedProject && (
         <div className="fixed inset-0 z-20 grid place-items-center bg-[rgba(4,7,8,0.75)] p-[30px] backdrop-blur-[4px]" role="presentation" onMouseDown={closePullModal}>
-          <section className="w-full max-w-[480px] rounded-[10px] border border-[#33483e] bg-[#11191a] p-7 shadow-[0_25px_80px_rgba(0,0,0,0.45)]" role="dialog" aria-modal="true" aria-labelledby="pull-modal-title" onMouseDown={(event) => event.stopPropagation()}>
-            <header className="flex items-start justify-between border-b border-[#24312d] pb-[23px]">
+          <section className="w-full max-w-[480px] rounded-md border border-[#3a444f] bg-[#171b20] p-7 shadow-[0_25px_80px_rgba(0,0,0,0.45)]" role="dialog" aria-modal="true" aria-labelledby="pull-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="flex items-start justify-between border-b border-[#2b323a] pb-[23px]">
               <div>
                 <p className={eyebrowClass}>Git operation</p>
                 <h2 className="mt-2 text-[27px] font-semibold leading-[1.1] tracking-[-0.04em] text-[#eef5ef]" id="pull-modal-title">Pull changes</h2>
                 <p className="mt-2 text-[11px] text-[#82918a]">Pull from origin into {selectedProject.name}.</p>
               </div>
-              <button className="grid h-7 w-7 place-items-center rounded border border-[#304139] bg-[#16211e] text-[#90a097] transition hover:border-[#5b7d69] hover:text-[#e4f0e8]" type="button" aria-label="Close" onClick={closePullModal}>x</button>
+              <button className="grid h-7 w-7 place-items-center rounded border border-[#3b4652] bg-[#20262d] text-[#a6b1bc] transition hover:border-[#6a7e95] hover:text-[#eef4fb]" type="button" aria-label="Close" onClick={closePullModal}>×</button>
             </header>
 
             <form onSubmit={(event) => void runPull(event)}>
               <label className="mt-[23px] grid gap-[7px] text-[10px] text-[#82918a]">
                 <span className="font-semibold tracking-[0.03em]">Branch</span>
-                <select className="min-h-[35px] w-full rounded-[5px] border border-[#2a3933] bg-[#0d1315] px-2.5 text-[11px] text-[#dce8df] outline-none transition focus:border-[#66957a] focus:shadow-[0_0_0_2px_rgba(102,149,122,0.13)]" required value={selectedGitBranch} disabled={isPulling || gitBranches.length === 0} onChange={(event) => setSelectedGitBranch(event.target.value)}>
-                  <option value="" disabled>{gitBranches.length === 0 ? "No local branches found" : "Select a branch"}</option>
+                <select className="min-h-[35px] w-full rounded-[5px] border border-[#2a3933] bg-[#0d1315] px-2.5 text-[11px] text-[#dce8df] outline-none transition focus:border-[#66957a] focus:shadow-[0_0_0_2px_rgba(102,149,122,0.13)]" required value={selectedGitBranch} disabled={isPulling || isLoadingBranches || gitBranches.length === 0} onChange={(event) => setSelectedGitBranch(event.target.value)}>
+                  <option value="" disabled>{isLoadingBranches ? "กำลังโหลด branch..." : gitBranches.length === 0 ? "ไม่พบ local branch" : "เลือก branch"}</option>
                   {gitBranches.map((branch) => <option key={branch.name} value={branch.name}>{branch.name}{branch.current ? " (current)" : ""}</option>)}
                 </select>
               </label>
 
-              {pullError && <div className="mt-[18px] rounded-md border border-[#5a3436] bg-[#24181b] px-3 py-2.5 text-[11px] text-[#e3a2a2]" role="alert">{pullError}</div>}
+              {pullError && <div className="mt-[18px]"><ErrorBanner message={pullError} compact onDismiss={() => setPullError(null)} /></div>}
               <footer className="mt-[22px] flex justify-end gap-2 border-t border-[#24312d] pt-6">
                 <button className={ghostButtonClass} type="button" onClick={closePullModal}>Cancel</button>
-                <button className={primaryButtonClass} type="submit" disabled={isPulling || !selectedGitBranch}>{isPulling ? "Pulling..." : "Pull changes"}</button>
+                <button className={primaryButtonClass} type="submit" disabled={isPulling || isLoadingBranches || !selectedGitBranch}>{isPulling ? <LoadingSpinner label="กำลัง Pull" small /> : "Pull changes"}</button>
               </footer>
             </form>
           </section>
