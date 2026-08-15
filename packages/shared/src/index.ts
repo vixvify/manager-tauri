@@ -68,6 +68,14 @@ export interface BuildResult {
   output: string;
 }
 
+export interface ProjectCommandResult {
+  command: string;
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  success: boolean;
+}
+
 export type LogStream = "stdout" | "stderr";
 
 export interface ServiceLogEntry {

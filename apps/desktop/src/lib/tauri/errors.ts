@@ -8,6 +8,7 @@ const errorByCode: Record<string, string> = {
   service_not_found: "ไม่พบ service นี้ในโปรเจกต์",
   invalid_project: "ข้อมูลโปรเจกต์ไม่ถูกต้อง กรุณาตรวจสอบชื่อและโฟลเดอร์",
   invalid_service: "ข้อมูล service ไม่ถูกต้อง กรุณาตรวจสอบชื่อและคำสั่ง",
+  invalid_command: "กรุณาระบุคำสั่งที่ต้องการรัน",
   port_in_use: "พอร์ตนี้ถูกใช้งานอยู่แล้ว กรุณาปิดโปรแกรมที่ใช้พอร์ตนี้ก่อน",
   process_already_running: "service นี้กำลังทำงานอยู่แล้ว",
   process_still_stopping: "service นี้กำลังหยุดอยู่ กรุณารอสักครู่แล้วลองใหม่",
