@@ -1,7 +1,8 @@
 use crate::error::{AppError, AppResult};
 use crate::models::{
-    BuildResult, DevDeckEvent, LogStream, PortStatus, ProjectRuntimeState, RuntimeMode, Service,
-    ServiceLogEntry, ServiceLogEvent, ServiceRuntimeState, ServiceStatus, ServiceStatusEvent,
+    BuildResult, DevDeckEvent, LogStream, PortStatus, ProjectCommandResult, ProjectRuntimeState,
+    RuntimeMode, Service, ServiceLogEntry, ServiceLogEvent, ServiceRuntimeState, ServiceStatus,
+    ServiceStatusEvent,
 };
 use crate::services::{docker_service, port_service, project_service};
 use crate::state::{key, AppState, ManagedProcess};
@@ -106,6 +107,28 @@ pub fn get_logs(
         .get(&key(project_id, service_id))
         .cloned()
         .unwrap_or_default())
+}
+
+pub fn run_project_command(
+    state: &AppState,
+    project_id: &str,
+    command: &str,
+) -> AppResult<ProjectCommandResult> {
+    let project = project_service::get_project(state, project_id)?;
+    let cwd = resolve_working_directory(&project.path, None)?;
+    let command_text = command.trim().to_string();
+    if command_text.is_empty() {
+        return Err(AppError::InvalidCommand("A command is required.".into()));
+    }
+
+    let output = spawn_shell_command(&command_text, &cwd)?;
+    Ok(ProjectCommandResult {
+        command: command_text,
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        exit_code: output.status.code(),
+        success: output.status.success(),
+    })
 }
 
 pub fn start_project(
@@ -220,14 +243,6 @@ pub fn start_service(
     if is_docker {
         let starting = runtime_state(&service, ServiceStatus::Starting, RuntimeMode::Docker);
         set_runtime_state(app, state, project_id, starting);
-        append_log(
-            app,
-            state,
-            project_id,
-            service_id,
-            LogStream::Stdout,
-            format!("> {}\n", service.command),
-        );
         let output = match docker_service::start(&service.command, &cwd) {
             Ok(output) => output,
             Err(error) => {
@@ -284,14 +299,6 @@ pub fn start_service(
     let mut starting = runtime_state(&service, ServiceStatus::Starting, RuntimeMode::Process);
     starting.pid = Some(pid);
     set_runtime_state(app, state, project_id, starting);
-    append_log(
-        app,
-        state,
-        project_id,
-        service_id,
-        LogStream::Stdout,
-        format!("> {}\n", service.command),
-    );
 
     if let Some(reader) = stdout {
         spawn_log_reader(
@@ -431,20 +438,6 @@ pub fn build_service(
         .filter(|command| !command.trim().is_empty());
     let is_docker = docker_service::is_compose_up(&service.command);
     let command = configured_command.unwrap_or("docker compose build");
-    let display_command = if configured_command.is_none() && is_docker {
-        docker_service::build_description(&service.command).unwrap_or_else(|_| command.into())
-    } else {
-        command.into()
-    };
-    append_log(
-        app,
-        state,
-        project_id,
-        service_id,
-        LogStream::Stdout,
-        format!("> {display_command}\n"),
-    );
-
     let output = if configured_command.is_none() && is_docker {
         docker_service::build(&service.command, &cwd)?
     } else {
@@ -850,6 +843,28 @@ fn spawn_process(command: &str, cwd: &Path) -> AppResult<Child> {
     })
 }
 
+fn spawn_shell_command(command: &str, cwd: &Path) -> AppResult<std::process::Output> {
+    let mut process = if cfg!(windows) {
+        let mut shell = Command::new("cmd.exe");
+        shell.args(["/D", "/S", "/C", command]);
+        shell
+    } else {
+        let mut shell = Command::new("sh");
+        shell.args(["-lc", command]);
+        shell
+    };
+    process
+        .current_dir(cwd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    configure_hidden(&mut process);
+    process.output().map_err(|error| AppError::CommandFailed {
+        command: command.into(),
+        message: error.to_string(),
+    })
+}
+
 pub(crate) fn tokenize_command(command: &str) -> AppResult<Vec<String>> {
     let mut tokens = Vec::new();
     let mut current = String::new();
@@ -938,5 +953,19 @@ mod tests {
             thread::sleep(Duration::from_millis(25));
         }
         panic!("test process did not stop");
+    }
+
+    #[test]
+    fn runs_project_shell_command_and_captures_output() {
+        let cwd = std::env::current_dir().expect("read current directory");
+        let command = if cfg!(windows) {
+            "echo devdeck"
+        } else {
+            "printf devdeck"
+        };
+        let output = spawn_shell_command(command, &cwd).expect("run shell command");
+
+        assert!(output.status.success());
+        assert!(String::from_utf8_lossy(&output.stdout).contains("devdeck"));
     }
 }

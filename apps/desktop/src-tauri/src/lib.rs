@@ -29,6 +29,7 @@ pub fn run() {
             commands::process::get_runtime,
             commands::process::get_project_runtime,
             commands::process::get_service_logs,
+            commands::process::run_project_command,
             commands::process::start_project,
             commands::process::stop_project,
             commands::process::start_service,

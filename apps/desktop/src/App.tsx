@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { GitBranch, Project, ProjectInput, ProjectRuntimeState, Service, ServiceLogEntry, ServiceRuntimeState, ServiceStatus } from "@devdeck/shared";
+import type { GitBranch, Project, ProjectCommandResult, ProjectInput, ProjectRuntimeState, Service, ServiceLogEntry, ServiceRuntimeState, ServiceStatus } from "@devdeck/shared";
 import { getTauriErrorMessage } from "./lib/tauri/errors";
 import { subscribeToDevDeckEvents } from "./lib/tauri/events";
 import { getGitBranches, pullProject } from "./lib/tauri/git";
-import { buildService, getRuntime, getServiceLogs, restartService, startProject, startService, stopProject, stopService } from "./lib/tauri/processes";
+import { buildService, getRuntime, getServiceLogs, restartService, runProjectCommand, startProject, startService, stopProject, stopService } from "./lib/tauri/processes";
 import { addProject, getProjects, removeProject as removeRegisteredProject, reorderProjects, updateProject } from "./lib/tauri/projects";
 import { openServiceUrl } from "./lib/tauri/system";
 
@@ -13,7 +13,7 @@ type ModalMode = "create" | "edit" | null;
 type ProjectForm = Omit<ProjectInput, "services"> & { services: Service[] };
 type ProcessAction = "start" | "stop" | "restart" | "build";
 type LogSocketState = "connecting" | "connected" | "disconnected";
-type ActivityKind = "start" | "stop" | "restart" | "build" | "pull" | "status" | "project" | "error";
+type ActivityKind = "start" | "stop" | "restart" | "build" | "pull" | "project";
 type ActivityState = "working" | "success" | "error" | "info";
 
 interface ActivityEntry {
@@ -118,7 +118,7 @@ function getUrlPort(url: string) {
 }
 
 function activityKindLabel(kind: ActivityKind) {
-  return kind === "status" ? "STATUS" : kind === "project" ? "PROJECT" : kind.toUpperCase();
+  return kind === "project" ? "PROJECT" : kind.toUpperCase();
 }
 
 function processActionLabel(action: ProcessAction) {
@@ -161,6 +161,10 @@ export function App() {
   const [isLoadingBranches, setIsLoadingBranches] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const [pullError, setPullError] = useState<string | null>(null);
+  const [projectCommand, setProjectCommand] = useState("");
+  const [projectCommandOutput, setProjectCommandOutput] = useState<ProjectCommandResult | null>(null);
+  const [projectCommandError, setProjectCommandError] = useState<string | null>(null);
+  const [isRunningProjectCommand, setIsRunningProjectCommand] = useState(false);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [activityProjectFilter, setActivityProjectFilter] = useState("all");
   const runtimeRequestInFlight = useRef(false);
@@ -263,25 +267,6 @@ export function App() {
         }
       },
       (payload) => {
-        if (!disposed) {
-          const project = projects.find((candidate) => candidate.id === payload.projectId);
-          const service = project?.services.find((candidate) => candidate.id === payload.serviceId);
-          const statusState: ActivityState = payload.status === "error"
-            ? "error"
-            : payload.status === "running" || payload.status === "stopped"
-              ? "success"
-              : "working";
-          recordActivity({
-            projectId: payload.projectId,
-            projectName: project?.name ?? payload.projectId,
-            serviceName: service?.name ?? payload.serviceId,
-            kind: payload.status === "error" ? "error" : "status",
-            state: statusState,
-            message: payload.error
-              ? getTauriErrorMessage(payload.error, "เกิดข้อผิดพลาดกับ service นี้")
-              : `สถานะ service: ${payload.status}`
-          });
-        }
         if (!disposed && payload.projectId === selectedProjectId) {
           void loadRuntime();
         }
@@ -300,12 +285,14 @@ export function App() {
       unsubscribe?.();
       setLogSocketState("disconnected");
     };
-  }, [loadRuntime, projects, recordActivity, selectedProjectId]);
+  }, [loadRuntime, selectedProjectId]);
 
   useEffect(() => {
     setSelectedLogServiceId(null);
     setServiceLogs({});
     setDetectedServiceUrls({});
+    setProjectCommandOutput(null);
+    setProjectCommandError(null);
   }, [selectedProjectId]);
 
   function openCreateModal() {
@@ -565,6 +552,24 @@ export function App() {
     }
   }
 
+  async function executeProjectCommand(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!selectedProject || !projectCommand.trim() || isRunningProjectCommand) {
+      return;
+    }
+
+    setIsRunningProjectCommand(true);
+    setProjectCommandError(null);
+    try {
+      setProjectCommandOutput(await runProjectCommand(selectedProject.id, projectCommand.trim()));
+    } catch (error) {
+      setProjectCommandOutput(null);
+      setProjectCommandError(getTauriErrorMessage(error, "ไม่สามารถรันคำสั่งในโปรเจกต์ได้"));
+    } finally {
+      setIsRunningProjectCommand(false);
+    }
+  }
+
   async function openPullModal() {
     if (!selectedProject) {
       return;
@@ -703,7 +708,7 @@ export function App() {
               <div className="grid gap-0.5 p-2">
                 {projects.map((project) => (
                   <article
-                    className={`rounded-md border px-3.5 py-3.5 transition hover:border-[#46525e] hover:bg-[#1d2329] ${project.id === selectedProjectId ? "border-[#526a84] bg-[#202b38]" : "border-transparent"}`}
+                    className={`cursor-pointer rounded-md border px-3.5 py-3.5 transition hover:border-[#46525e] hover:bg-[#1d2329] ${project.id === selectedProjectId ? "border-[#526a84] bg-[#202b38]" : "border-transparent"}`}
                     key={project.id}
                     onClick={() => setSelectedProjectId(project.id)}
                   >
@@ -831,18 +836,20 @@ export function App() {
                   <section className="mt-4 overflow-hidden rounded-md border border-[#303842] bg-[#0d1115]" aria-label={`${selectedLogService.name} logs`}>
                     <header className="flex items-center justify-between gap-3.5 border-b border-[#27303a] bg-[#13181e] px-[15px] py-[13px]">
                       <div>
-                        <p className={eyebrowClass}>Live output</p>
+                        <p className={eyebrowClass}>Process logs</p>
                         <h3 className="mt-1.5 text-[13px] font-semibold text-[#dce9df]">{selectedLogService.name}</h3>
+                        <p className="mt-1 font-mono text-[9px] text-[#63717e]">stdout / stderr จาก process จริง</p>
                       </div>
                       <div className="flex items-center gap-[7px] font-mono text-[9px] uppercase text-[#778a7e]"><StatusDot state={logSocketState === "connected" ? "running" : logSocketState === "connecting" ? "starting" : "stopped"} /><span>{logSocketState}</span></div>
                     </header>
                     <div className="max-h-[235px] overflow-auto px-3.5 py-3 font-mono text-[10px] leading-[1.65] text-[#aeb8c3]">
                       {(serviceLogs[selectedLogService.id] ?? []).length === 0 ? (
-                        <span className="block px-1 py-[19px] text-[#60736a]">No output yet. Start the service to stream its terminal output.</span>
+                        <span className="block px-1 py-[19px] text-[#60736a]">ยังไม่มี output จาก process นี้ กด Start แล้วลองเปิด Logs อีกครั้ง</span>
                       ) : (
                         serviceLogs[selectedLogService.id].map((entry, index) => (
-                          <div className={`grid grid-cols-[70px_minmax(0,1fr)] gap-2.5 whitespace-pre-wrap break-words ${entry.stream === "stderr" ? "text-[#d6a3a3]" : ""}`} key={`${entry.timestamp}-${index}`}>
+                          <div className={`grid grid-cols-[70px_52px_minmax(0,1fr)] gap-2.5 whitespace-pre-wrap break-words ${entry.stream === "stderr" ? "text-[#d6a3a3]" : ""}`} key={`${entry.timestamp}-${index}`}>
                             <time className={entry.stream === "stderr" ? "text-[#8f6565]" : "text-[#50645a]"}>{new Date(entry.timestamp).toLocaleTimeString()}</time>
+                            <span className={`text-[9px] uppercase ${entry.stream === "stderr" ? "text-[#b87979]" : "text-[#7497bc]"}`}>{entry.stream}</span>
                             <span>{entry.message}</span>
                           </div>
                         ))
@@ -868,11 +875,56 @@ export function App() {
           </section>
         </div>
 
+        {selectedProject && <section className="mt-4 overflow-hidden rounded-md border border-[#2b3138] bg-[#13171b]" aria-labelledby="project-terminal-title">
+          <header className="flex items-start justify-between gap-4 border-b border-[#2b3138] px-4 py-3">
+            <div>
+              <p className={eyebrowClass}>Project terminal</p>
+              <h3 className="mt-1 text-[14px] font-semibold tracking-[-0.03em] text-[#dfe8e2]" id="project-terminal-title">Run a command</h3>
+              <p className="mt-1 text-[10px] text-[#778390]">รันในโฟลเดอร์หลักของ {selectedProject.name} และแสดง stdout/stderr จริง</p>
+            </div>
+            <span className="font-mono text-[9px] text-[#687684]">{selectedProject.path}</span>
+          </header>
+
+          <form className="flex gap-2 px-4 py-3" onSubmit={(event) => void executeProjectCommand(event)}>
+            <label className="flex min-w-0 flex-1 items-center gap-2 rounded border border-[#343f4b] bg-[#0e1216] px-3 focus-within:border-[#607e9e]">
+              <span className="font-mono text-[12px] text-[#8aa9ce]" aria-hidden="true">&gt;</span>
+              <input
+                className="min-h-9 min-w-0 flex-1 border-0 bg-transparent font-mono text-[11px] text-[#dce6f0] outline-none placeholder:text-[#566472]"
+                value={projectCommand}
+                placeholder="git status"
+                aria-label="คำสั่งสำหรับโปรเจกต์"
+                disabled={isRunningProjectCommand}
+                onChange={(event) => setProjectCommand(event.target.value)}
+              />
+            </label>
+            <button className={primaryButtonClass} type="submit" disabled={isRunningProjectCommand || !projectCommand.trim()}>
+              {isRunningProjectCommand ? <LoadingSpinner label="กำลังรัน" small /> : "Run"}
+            </button>
+          </form>
+
+          <p className="px-4 pb-3 text-[9px] text-[#687684]">คำสั่งที่ทำงานต่อเนื่อง เช่น <code>yarn dev</code> ควรสร้างเป็น service เพื่อให้ DevDeck จัดการ Start/Stop ได้</p>
+
+          {projectCommandError && <div className="px-4 pb-3"><ErrorBanner message={projectCommandError} compact onDismiss={() => setProjectCommandError(null)} /></div>}
+
+          {projectCommandOutput && <section className="border-t border-[#2b3138] bg-[#0d1115]" aria-label="Project command output">
+            <header className="flex items-center justify-between border-b border-[#27303a] px-4 py-2.5 font-mono text-[9px]">
+              <span className="uppercase tracking-[0.08em] text-[#778390]">Command output</span>
+              <span className={projectCommandOutput.success ? "text-[#83cda3]" : "text-[#d18484]"}>{projectCommandOutput.success ? "exit 0" : `exit ${projectCommandOutput.exitCode ?? "error"}`}</span>
+            </header>
+            <div className="max-h-[260px] overflow-auto px-4 py-3 font-mono text-[10px] leading-[1.65]">
+              {projectCommandOutput.stdout && <div className="mb-3 last:mb-0"><p className="mb-1 text-[9px] uppercase text-[#7497bc]">stdout</p><pre className="m-0 whitespace-pre-wrap break-words text-[#b5c1cc]">{projectCommandOutput.stdout}</pre></div>}
+              {projectCommandOutput.stderr && <div><p className="mb-1 text-[9px] uppercase text-[#b87979]">stderr</p><pre className="m-0 whitespace-pre-wrap break-words text-[#d6a3a3]">{projectCommandOutput.stderr}</pre></div>}
+              {!projectCommandOutput.stdout && !projectCommandOutput.stderr && <p className="m-0 text-[#687684]">คำสั่งทำงานสำเร็จ แต่ไม่มี output</p>}
+            </div>
+          </section>}
+        </section>}
+
         <section className="mt-4 overflow-hidden rounded-md border border-[#2b3138] bg-[#13171b]" id="activity" aria-labelledby="activity-title">
           <header className="flex items-center gap-4 border-b border-[#2b3138] px-4 py-3">
             <div>
               <p className={eyebrowClass}>Activity</p>
-              <h3 className="mt-1 text-[14px] font-semibold tracking-[-0.03em] text-[#dfe8e2]" id="activity-title">Recent workspace activity</h3>
+              <h3 className="mt-1 text-[14px] font-semibold tracking-[-0.03em] text-[#dfe8e2]" id="activity-title">Operation history</h3>
+              <p className="mt-1 text-[10px] text-[#697781]">ประวัติการสั่งงาน ไม่ใช่ process logs</p>
             </div>
             <div className="ml-auto flex items-center gap-2">
               <select className="min-h-[30px] rounded border border-[#343b44] bg-[#101419] px-2 text-[10px] text-[#b0bac5] outline-none focus:border-[#607e9e]" aria-label="Filter activity by project" value={activityProjectFilter} onChange={(event) => setActivityProjectFilter(event.target.value)}>

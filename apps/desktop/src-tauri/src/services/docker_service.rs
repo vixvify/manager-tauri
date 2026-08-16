@@ -34,18 +34,6 @@ pub fn build(command: &str, cwd: &Path) -> AppResult<Output> {
     }
 }
 
-pub fn build_description(command: &str) -> AppResult<String> {
-    let tokens = tokenize_command(command)?;
-    let up_index = tokens
-        .iter()
-        .position(|token| token.eq_ignore_ascii_case("up"))
-        .ok_or_else(|| AppError::InvalidCommand(command.into()))?;
-    let mut build_tokens = tokens[..up_index].to_vec();
-    build_tokens.push("build".into());
-    build_tokens.extend(service_names(&tokens[up_index + 1..]));
-    Ok(build_tokens.join(" "))
-}
-
 pub fn stop(command: &str, cwd: &Path) -> AppResult<()> {
     let output = run_compose(command, cwd, ComposeAction::Stop)?;
     if !output.status.success() {
@@ -275,15 +263,6 @@ mod tests {
     fn recognizes_legacy_docker_compose() {
         let tokens = tokenize_command("docker-compose up -d").expect("parse compose command");
         assert_eq!(compose_command_start(&tokens), Some(1));
-    }
-
-    #[test]
-    fn derives_build_command_from_compose_start_command() {
-        assert_eq!(
-            build_description("docker compose --env-file local.env up -d backend proxy")
-                .expect("derive build command"),
-            "docker compose --env-file local.env build backend proxy"
-        );
     }
 
     #[test]

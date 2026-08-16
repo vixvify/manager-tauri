@@ -1,5 +1,7 @@
 use crate::error::{AppError, AppResult};
-use crate::models::{BuildResult, ProjectRuntimeState, ServiceLogEntry, ServiceRuntimeState};
+use crate::models::{
+    BuildResult, ProjectCommandResult, ProjectRuntimeState, ServiceLogEntry, ServiceRuntimeState,
+};
 use crate::services::process_service;
 use crate::state::AppState;
 use tauri::{AppHandle, State};
@@ -38,6 +40,23 @@ pub fn get_service_logs(
     state: State<'_, AppState>,
 ) -> AppResult<Vec<ServiceLogEntry>> {
     process_service::get_logs(&state, &project_id, &service_id)
+}
+
+#[tauri::command]
+pub async fn run_project_command(
+    project_id: String,
+    command: String,
+    state: State<'_, AppState>,
+) -> AppResult<ProjectCommandResult> {
+    let state = (*state).clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        process_service::run_project_command(&state, &project_id, &command)
+    })
+    .await
+    .map_err(|error| AppError::CommandFailed {
+        command: "run project command".into(),
+        message: error.to_string(),
+    })?
 }
 
 #[tauri::command]

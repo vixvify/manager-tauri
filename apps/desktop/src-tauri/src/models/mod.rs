@@ -3,5 +3,6 @@ pub mod project;
 pub use project::{
     BuildResult, DevDeckEvent, GitBranch, GitPullResult, LogStream, PortStatus, Project,
     ProjectInput, ProjectReorderInput, ProjectRuntimeState, RuntimeMode, Service, ServiceInput,
-    ServiceLogEntry, ServiceLogEvent, ServiceRuntimeState, ServiceStatus, ServiceStatusEvent,
+    ProjectCommandResult, ServiceLogEntry, ServiceLogEvent, ServiceRuntimeState, ServiceStatus,
+    ServiceStatusEvent,
 };
