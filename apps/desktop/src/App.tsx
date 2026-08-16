@@ -13,7 +13,7 @@ type ModalMode = "create" | "edit" | null;
 type ProjectForm = Omit<ProjectInput, "services"> & { services: Service[] };
 type ProcessAction = "start" | "stop" | "restart" | "build";
 type LogSocketState = "connecting" | "connected" | "disconnected";
-type ActivityKind = "start" | "stop" | "restart" | "build" | "pull" | "status" | "project" | "error";
+type ActivityKind = "start" | "stop" | "restart" | "build" | "pull" | "project";
 type ActivityState = "working" | "success" | "error" | "info";
 
 interface ActivityEntry {
@@ -118,7 +118,7 @@ function getUrlPort(url: string) {
 }
 
 function activityKindLabel(kind: ActivityKind) {
-  return kind === "status" ? "STATUS" : kind === "project" ? "PROJECT" : kind.toUpperCase();
+  return kind === "project" ? "PROJECT" : kind.toUpperCase();
 }
 
 function processActionLabel(action: ProcessAction) {
@@ -267,25 +267,6 @@ export function App() {
         }
       },
       (payload) => {
-        if (!disposed) {
-          const project = projects.find((candidate) => candidate.id === payload.projectId);
-          const service = project?.services.find((candidate) => candidate.id === payload.serviceId);
-          const statusState: ActivityState = payload.status === "error"
-            ? "error"
-            : payload.status === "running" || payload.status === "stopped"
-              ? "success"
-              : "working";
-          recordActivity({
-            projectId: payload.projectId,
-            projectName: project?.name ?? payload.projectId,
-            serviceName: service?.name ?? payload.serviceId,
-            kind: payload.status === "error" ? "error" : "status",
-            state: statusState,
-            message: payload.error
-              ? getTauriErrorMessage(payload.error, "เกิดข้อผิดพลาดกับ service นี้")
-              : `สถานะ service: ${payload.status}`
-          });
-        }
         if (!disposed && payload.projectId === selectedProjectId) {
           void loadRuntime();
         }
@@ -304,7 +285,7 @@ export function App() {
       unsubscribe?.();
       setLogSocketState("disconnected");
     };
-  }, [loadRuntime, projects, recordActivity, selectedProjectId]);
+  }, [loadRuntime, selectedProjectId]);
 
   useEffect(() => {
     setSelectedLogServiceId(null);
@@ -855,8 +836,9 @@ export function App() {
                   <section className="mt-4 overflow-hidden rounded-md border border-[#303842] bg-[#0d1115]" aria-label={`${selectedLogService.name} logs`}>
                     <header className="flex items-center justify-between gap-3.5 border-b border-[#27303a] bg-[#13181e] px-[15px] py-[13px]">
                       <div>
-                        <p className={eyebrowClass}>Terminal output</p>
+                        <p className={eyebrowClass}>Process logs</p>
                         <h3 className="mt-1.5 text-[13px] font-semibold text-[#dce9df]">{selectedLogService.name}</h3>
+                        <p className="mt-1 font-mono text-[9px] text-[#63717e]">stdout / stderr จาก process จริง</p>
                       </div>
                       <div className="flex items-center gap-[7px] font-mono text-[9px] uppercase text-[#778a7e]"><StatusDot state={logSocketState === "connected" ? "running" : logSocketState === "connecting" ? "starting" : "stopped"} /><span>{logSocketState}</span></div>
                     </header>
@@ -941,7 +923,8 @@ export function App() {
           <header className="flex items-center gap-4 border-b border-[#2b3138] px-4 py-3">
             <div>
               <p className={eyebrowClass}>Activity</p>
-              <h3 className="mt-1 text-[14px] font-semibold tracking-[-0.03em] text-[#dfe8e2]" id="activity-title">Recent workspace activity</h3>
+              <h3 className="mt-1 text-[14px] font-semibold tracking-[-0.03em] text-[#dfe8e2]" id="activity-title">Operation history</h3>
+              <p className="mt-1 text-[10px] text-[#697781]">ประวัติการสั่งงาน ไม่ใช่ process logs</p>
             </div>
             <div className="ml-auto flex items-center gap-2">
               <select className="min-h-[30px] rounded border border-[#343b44] bg-[#101419] px-2 text-[10px] text-[#b0bac5] outline-none focus:border-[#607e9e]" aria-label="Filter activity by project" value={activityProjectFilter} onChange={(event) => setActivityProjectFilter(event.target.value)}>
